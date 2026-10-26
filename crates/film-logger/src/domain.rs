@@ -76,6 +76,12 @@ pub enum Format {
         projection: Projection,
         /// The auditorium class.
         screen: ScreenClass,
+        /// Presented in 3D.
+        #[serde(default)]
+        three_d: bool,
+        /// Presented at high frame rate.
+        #[serde(default)]
+        hfr: bool,
     },
     /// A home viewing.
     #[serde(rename = "home")]
@@ -99,32 +105,85 @@ impl Format {
     }
 }
 
-/// Theatrical projection technology.
+/// Theatrical projection technology, grouped by projection family.
+///
+/// The family mirrors how a technology is branded and screened: standard
+/// digital cinema ([`Dci`]), [`Imax`], and [`Film`]. Each family owns its
+/// resolution and light-source ladder; a brand-new technology is logged through
+/// the family's `Custom` escape hatch without a library release.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Projection {
-    /// Digital projector, lamp bulb, 2K.
-    #[serde(rename = "lamp_2k")]
+    /// Standard digital cinema (DCI).
+    #[serde(rename = "dci")]
+    Dci(Dci),
+    /// IMAX.
+    #[serde(rename = "imax")]
+    Imax(Imax),
+    /// Film.
+    #[serde(rename = "film")]
+    Film(Film),
+}
+
+/// Standard digital cinema (DCI) projector.
+///
+/// Light source defaults to xenon lamp unless a laser variant is explicit
+/// ("DCI is without laser unless specified").
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Dci {
+    /// 2K resolution, xenon lamp.
+    #[serde(rename = "2k_lamp")]
     Lamp2K,
-    /// Digital projector, lamp bulb, 4K.
-    #[serde(rename = "lamp_4k")]
-    Lamp4K,
-    /// Digital projector, laser, 2K.
-    #[serde(rename = "laser_2k")]
+    /// 2K resolution, laser.
+    #[serde(rename = "2k_laser")]
     Laser2K,
-    /// Digital projector, laser, 4K.
-    #[serde(rename = "laser_4k")]
+    /// 4K resolution, xenon lamp.
+    #[serde(rename = "4k_lamp")]
+    Lamp4K,
+    /// 4K resolution, laser.
+    #[serde(rename = "4k_laser")]
     Laser4K,
-    /// Film projector, 35mm.
-    #[serde(rename = "film_35mm")]
-    Film35mm,
-    /// Film projector, standard 70mm.
-    #[serde(rename = "film_70mm")]
+    /// A DCI projection not listed above.
+    #[serde(rename = "custom")]
+    Custom(String),
+}
+
+/// IMAX projection technology.
+///
+/// The 4K laser variants are distinct: single laser drives a smaller screen at a
+/// lower aspect ratio, dual laser a larger screen at a higher one.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Imax {
+    /// 2K, xenon lamp (the "IMAX with xenon" digital house).
+    #[serde(rename = "2k_xenon")]
+    Xenon2K,
+    /// 4K, single laser: smaller screen, lower aspect ratio.
+    #[serde(rename = "4k_single_laser")]
+    Laser4KSingle,
+    /// 4K, dual laser: larger screen, higher aspect ratio.
+    #[serde(rename = "4k_dual_laser")]
+    Laser4KDual,
+    /// 70mm film (15-perf).
+    #[serde(rename = "70mm")]
     Film70mm,
-    /// Film projector, IMAX 70mm.
-    #[serde(rename = "film_imax_70mm")]
-    FilmImax70mm,
-    /// A projection technology not listed above.
+    /// An IMAX projection not listed above.
+    #[serde(rename = "custom")]
+    Custom(String),
+}
+
+/// Film projection technology.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Film {
+    /// 35mm film.
+    #[serde(rename = "35mm")]
+    Mm35,
+    /// 70mm film, non-IMAX (e.g. Todd-AO).
+    #[serde(rename = "70mm")]
+    Mm70,
+    /// A film format not listed above.
     #[serde(rename = "custom")]
     Custom(String),
 }
@@ -142,6 +201,12 @@ pub enum ScreenClass {
     /// VIP-style auditorium: reclining seats, food & beverage service.
     #[serde(rename = "vip")]
     Vip,
+    /// 4DX auditorium: motion seats plus environmental effects.
+    #[serde(rename = "4dx")]
+    FourDx,
+    /// `ScreenX` auditorium: 3D presentation format.
+    #[serde(rename = "screenx")]
+    ScreenX,
     /// An auditorium class not listed above.
     #[serde(rename = "custom")]
     Custom(String),
@@ -169,6 +234,12 @@ pub enum HomeMedium {
     /// Streaming.
     #[serde(rename = "streaming")]
     Streaming,
+    /// Linear television broadcast.
+    #[serde(rename = "broadcast")]
+    Broadcast,
+    /// Telecine: theatrical-quality video transfer.
+    #[serde(rename = "telecine")]
+    Telecine,
     /// A medium not listed above.
     #[serde(rename = "custom")]
     Custom(String),
@@ -359,7 +430,9 @@ impl WatchLog {
 
 #[cfg(test)]
 mod tests {
-    use super::{FilmId, Format, HomeMedium, Projection, ScreenClass, Venue, WatchLog};
+    use super::{
+        Dci, Film, FilmId, Format, HomeMedium, Imax, Projection, ScreenClass, Venue, WatchLog,
+    };
     use crate::error::Error;
     use crate::tmdb::Movie;
     use chrono::{DateTime, Local, Utc};
@@ -447,14 +520,28 @@ mod tests {
 
     #[test]
     fn format_serde() {
-        let f = Format::Theatre {
-            projection: Projection::Laser4K,
+        let dci = Format::Theatre {
+            projection: Projection::Dci(Dci::Lamp4K),
             screen: ScreenClass::Plf,
+            three_d: false,
+            hfr: false,
         };
         assert_eq!(
-            serde_json::to_string(&f).unwrap(),
-            r#"{"theatre":{"projection":"laser_4k","screen":"plf"}}"#
+            serde_json::to_string(&dci).unwrap(),
+            r#"{"theatre":{"projection":{"dci":"4k_lamp"},"screen":"plf","three_d":false,"hfr":false}}"#
         );
+
+        let imax = Format::Theatre {
+            projection: Projection::Imax(Imax::Laser4KDual),
+            screen: ScreenClass::Regular,
+            three_d: true,
+            hfr: true,
+        };
+        assert_eq!(
+            serde_json::to_string(&imax).unwrap(),
+            r#"{"theatre":{"projection":{"imax":"4k_dual_laser"},"screen":"regular","three_d":true,"hfr":true}}"#
+        );
+
         let h = Format::Home {
             medium: HomeMedium::Custom("d-box".into()),
         };
@@ -462,8 +549,12 @@ mod tests {
             serde_json::to_string(&h).unwrap(),
             r#"{"home":{"medium":{"custom":"d-box"}}}"#
         );
-        assert_eq!(f.venue(), Venue::Theatre);
+
+        assert_eq!(dci.venue(), Venue::Theatre);
         assert_eq!(h.venue(), Venue::Home);
+
+        // The two IMAX 4K laser variants are distinct (different screens).
+        assert_ne!(Imax::Laser4KSingle, Imax::Laser4KDual);
     }
 
     #[test]
@@ -473,8 +564,10 @@ mod tests {
             "Fight Club",
             Venue::Home,
             Format::Theatre {
-                projection: Projection::Film70mm,
+                projection: Projection::Film(Film::Mm70),
                 screen: ScreenClass::Regular,
+                three_d: false,
+                hfr: false,
             },
         );
         assert!(matches!(res, Err(Error::VenueFormatMismatch { .. })));
@@ -484,8 +577,10 @@ mod tests {
             "Fight Club",
             Venue::Theatre,
             Format::Theatre {
-                projection: Projection::Film70mm,
+                projection: Projection::Film(Film::Mm70),
                 screen: ScreenClass::Regular,
+                three_d: false,
+                hfr: false,
             },
         );
         assert!(ok.is_ok());

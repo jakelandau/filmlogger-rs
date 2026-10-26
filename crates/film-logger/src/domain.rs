@@ -82,6 +82,9 @@ pub enum Format {
         /// Presented at high frame rate.
         #[serde(default)]
         hfr: bool,
+        /// Presented on D-BOX motion seats.
+        #[serde(default)]
+        dbox: bool,
     },
     /// A home viewing.
     #[serde(rename = "home")]
@@ -525,10 +528,11 @@ mod tests {
             screen: ScreenClass::Plf,
             three_d: false,
             hfr: false,
+            dbox: false,
         };
         assert_eq!(
             serde_json::to_string(&dci).unwrap(),
-            r#"{"theatre":{"projection":{"dci":"4k_lamp"},"screen":"plf","three_d":false,"hfr":false}}"#
+            r#"{"theatre":{"projection":{"dci":"4k_lamp"},"screen":"plf","three_d":false,"hfr":false,"dbox":false}}"#
         );
 
         let imax = Format::Theatre {
@@ -536,10 +540,11 @@ mod tests {
             screen: ScreenClass::Regular,
             three_d: true,
             hfr: true,
+            dbox: true,
         };
         assert_eq!(
             serde_json::to_string(&imax).unwrap(),
-            r#"{"theatre":{"projection":{"imax":"4k_dual_laser"},"screen":"regular","three_d":true,"hfr":true}}"#
+            r#"{"theatre":{"projection":{"imax":"4k_dual_laser"},"screen":"regular","three_d":true,"hfr":true,"dbox":true}}"#
         );
 
         let h = Format::Home {
@@ -568,6 +573,7 @@ mod tests {
                 screen: ScreenClass::Regular,
                 three_d: false,
                 hfr: false,
+                dbox: false,
             },
         );
         assert!(matches!(res, Err(Error::VenueFormatMismatch { .. })));
@@ -581,6 +587,7 @@ mod tests {
                 screen: ScreenClass::Regular,
                 three_d: false,
                 hfr: false,
+                dbox: false,
             },
         );
         assert!(ok.is_ok());

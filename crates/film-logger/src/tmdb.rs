@@ -16,6 +16,15 @@ const TMDB_BASE_URL: &str = "https://api.themoviedb.org/3";
 /// Base URL of the TMDB image CDN.
 const IMAGE_BASE_URL: &str = "https://image.tmdb.org/t/p";
 
+/// The TMDB API key baked in at compile time, if present.
+///
+/// Set `TMDB_API_KEY` in the build environment (locally: your shell; on
+/// GitHub Actions: a repository secret). `build.rs` captures it as a
+/// compile-time environment variable, which is embedded here via
+/// `option_env!`, so a running process never reads the environment. `None`
+/// when the key was absent at build time.
+pub static COMPILED_API_KEY: Option<&'static str> = option_env!("TMDB_API_KEY");
+
 /// A genre associated with a film.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Genre {
@@ -141,6 +150,10 @@ pub struct SearchPage {
 /// The TMDB API client.
 pub struct TmdbClient {
     http: reqwest::Client,
+    /// True when the key is a JWT (a TMDB API Read Access Token) and should
+    /// be sent as a `Bearer` token; false when it is the legacy API Key
+    /// (sent as the `?api_key=` query parameter).
+    is_jwt: bool,
     api_key: String,
     language: String,
     base_url: String,
@@ -148,20 +161,35 @@ pub struct TmdbClient {
 
 impl TmdbClient {
     /// Create a client for the live TMDB API.
+    ///
+    /// `api_key` may be either the TMDB **API Read Access Token** (a JWT,
+    /// beginning with `eyJ`) or the legacy **API Key**; the client detects
+    /// which and sends it accordingly (Bearer token vs `?api_key=`).
     pub fn new(api_key: impl Into<String>) -> Self {
-        Self {
-            http: reqwest::Client::new(),
-            api_key: api_key.into(),
-            language: "en".into(),
-            base_url: TMDB_BASE_URL.into(),
-        }
+        Self::make(api_key, TMDB_BASE_URL)
     }
 
     /// Create a client against a custom base URL (for tests).
     pub fn with_base_url(api_key: impl Into<String>, base_url: impl Into<String>) -> Self {
+        Self::make(api_key, base_url)
+    }
+
+    /// Create a client from the key baked in at compile time.
+    ///
+    /// Returns `None` if `TMDB_API_KEY` was absent from the build
+    /// environment (see [`COMPILED_API_KEY`]).
+    #[must_use]
+    pub fn from_compiled_key() -> Option<Self> {
+        let api_key = COMPILED_API_KEY?;
+        Some(Self::new(api_key))
+    }
+
+    fn make(api_key: impl Into<String>, base_url: impl Into<String>) -> Self {
+        let api_key = api_key.into();
         Self {
             http: reqwest::Client::new(),
-            api_key: api_key.into(),
+            is_jwt: api_key.starts_with("eyJ"),
+            api_key,
             language: "en".into(),
             base_url: base_url.into(),
         }
@@ -210,13 +238,20 @@ impl TmdbClient {
         path: &str,
         extra: &[(&str, &str)],
     ) -> Result<T, Error> {
-        let mut params: Vec<(&str, &str)> = vec![
-            ("api_key", self.api_key.as_str()),
-            ("language", self.language.as_str()),
-        ];
+        let mut params: Vec<(&str, &str)> = vec![("language", self.language.as_str())];
+        if !self.is_jwt {
+            params.push(("api_key", self.api_key.as_str()));
+        }
         params.extend(extra.iter().copied());
         let url = format!("{}{path}", self.base_url);
-        let resp = self.http.get(url).query(&params).send().await?;
+        let mut req = self.http.get(url).query(&params);
+        if self.is_jwt {
+            req = req.header(
+                reqwest::header::AUTHORIZATION,
+                format!("Bearer {}", self.api_key),
+            );
+        }
+        let resp = req.send().await?;
         let status = resp.status();
         if status.is_success() {
             let value: T = resp.json().await?;
@@ -245,7 +280,7 @@ struct ApiError {
 
 #[cfg(test)]
 mod tests {
-    use super::Movie;
+    use super::{Movie, TmdbClient};
 
     fn test_movie() -> Movie {
         Movie {
@@ -296,5 +331,13 @@ mod tests {
             m.backdrop_url().as_deref(),
             Some("https://image.tmdb.org/t/p/original/def.jpg")
         );
+    }
+
+    #[test]
+    fn jwt_uses_bearer_api_key_uses_query() {
+        // A JWT (TMDB API Read Access Token) is sent as a Bearer token.
+        assert!(TmdbClient::new("eyJhbGciOiJIUzI1NiJ9.abc.def").is_jwt);
+        // A legacy API Key (not a JWT) is sent as ?api_key=.
+        assert!(!TmdbClient::new("abcdef1234567890").is_jwt);
     }
 }

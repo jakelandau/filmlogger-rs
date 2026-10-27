@@ -1,6 +1,7 @@
 //! A live smoke test against the real TMDB API.
 //!
-//! Set `TMDB_API_KEY` to a valid TMDB API key, then run:
+//! Set `TMDB_API_KEY` in your build environment (it is baked in at compile
+//! time), then run:
 //!
 //! ```sh
 //! cargo run --example tmdb_smoke
@@ -10,9 +11,10 @@ use film_logger::{Store, TmdbClient, Venue, WatchLog};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let api_key = std::env::var("TMDB_API_KEY").expect("set TMDB_API_KEY to a valid TMDB API key");
-
-    let client = TmdbClient::new(api_key);
+    let client = TmdbClient::from_compiled_key().expect(
+        "set TMDB_API_KEY in the build environment before building (locally: \
+         $env:TMDB_API_KEY=\"...\"; on CI: a GitHub Actions secret)",
+    );
 
     // A full movie by its TMDB numeric id (Fight Club is 550).
     let movie = client.movie(550).await?;

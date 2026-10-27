@@ -106,6 +106,59 @@ impl Format {
             Format::Home { .. } => Venue::Home,
         }
     }
+
+    /// Validate a theatre format against projection/screen compatibility and
+    /// presentation-flag policies.
+    ///
+    /// [`Format::Theatre`] checks that the projection runs in the screen and
+    /// that every flag is allowed (and, where the screen forces one, on) for
+    /// both the projection and the screen. [`Format::Home`] is always valid.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::ProjectionScreenMismatch`] if the projection does not
+    /// run in the screen, or [`Error::FlagMismatch`] if a flag is incompatible.
+    #[must_use = "a theatre format must be validated before use"]
+    pub fn validate(&self) -> Result<(), Error> {
+        let Format::Theatre {
+            projection,
+            screen,
+            three_d,
+            hfr,
+            dbox,
+        } = self
+        else {
+            return Ok(());
+        };
+        if !projection.runs_on(screen) {
+            return Err(Error::ProjectionScreenMismatch {
+                projection: projection.clone(),
+                screen: screen.clone(),
+            });
+        }
+        for (flag, on) in [
+            (Flag::ThreeD, *three_d),
+            (Flag::Hfr, *hfr),
+            (Flag::Dbox, *dbox),
+        ] {
+            let proj_ok = projection.allows(flag);
+            let screen_ok = screen.allows(flag);
+            let forced = screen.forces(flag);
+            let ok = if forced {
+                on && proj_ok && screen_ok
+            } else {
+                !on || (proj_ok && screen_ok)
+            };
+            if !ok {
+                return Err(Error::FlagMismatch {
+                    flag,
+                    projection: projection.clone(),
+                    screen: screen.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Theatrical projection technology, grouped by projection family.
@@ -210,9 +263,92 @@ pub enum ScreenClass {
     /// `ScreenX` auditorium: 3D presentation format.
     #[serde(rename = "screenx")]
     ScreenX,
+    /// IMAX classic (1.43:1 aspect ratio).
+    #[serde(rename = "imax_class")]
+    ImaxClassic,
+    /// IMAX retrofit (1.90:1 aspect ratio).
+    #[serde(rename = "imax_retrofit")]
+    ImaxRetrofit,
+    /// Ultra 4DX: [`ScreenClass::ScreenX`] plus 4DX environmental effects.
+    #[serde(rename = "ultra_4dx")]
+    Ultra4Dx,
     /// An auditorium class not listed above.
     #[serde(rename = "custom")]
     Custom(String),
+}
+
+/// A presentation flag for a theatrical screening.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Flag {
+    /// Presented in 3D.
+    ThreeD,
+    /// Presented at high frame rate.
+    Hfr,
+    /// Presented on D-BOX motion seats.
+    Dbox,
+}
+
+impl Projection {
+    /// Whether this projection can present the given presentation flag.
+    #[must_use]
+    pub fn allows(&self, flag: Flag) -> bool {
+        match self {
+            Projection::Dci(_) => true,
+            Projection::Imax(Imax::Film70mm) => false,
+            Projection::Imax(_) => !matches!(flag, Flag::Dbox),
+            Projection::Film(_) => matches!(flag, Flag::ThreeD),
+        }
+    }
+
+    /// Whether this projection can be screened in the given auditorium class.
+    #[must_use]
+    pub fn runs_on(&self, screen: &ScreenClass) -> bool {
+        match self {
+            Projection::Imax(_) => {
+                matches!(screen, ScreenClass::ImaxClassic | ScreenClass::ImaxRetrofit)
+            }
+            Projection::Dci(_) => {
+                !matches!(screen, ScreenClass::ImaxClassic | ScreenClass::ImaxRetrofit)
+            }
+            Projection::Film(_) => matches!(screen, ScreenClass::Regular),
+        }
+    }
+}
+
+impl ScreenClass {
+    /// Whether the given presentation flag may be on in this auditorium.
+    #[must_use]
+    pub fn allows(&self, flag: Flag) -> bool {
+        match self {
+            ScreenClass::Regular | ScreenClass::Plf | ScreenClass::Custom(_) => true,
+            ScreenClass::Vip
+            | ScreenClass::FourDx
+            | ScreenClass::Ultra4Dx
+            | ScreenClass::ImaxClassic
+            | ScreenClass::ImaxRetrofit => !matches!(flag, Flag::Dbox),
+            ScreenClass::ScreenX => false,
+        }
+    }
+
+    /// Whether the given presentation flag must be on in this auditorium.
+    #[must_use]
+    pub fn forces(&self, flag: Flag) -> bool {
+        matches!(flag, Flag::ThreeD) && matches!(self, ScreenClass::FourDx | ScreenClass::Ultra4Dx)
+    }
+
+    /// The screen's aspect ratio, when it distinguishes the class.
+    ///
+    /// [`ScreenClass::ImaxClassic`] is `1.43:1`; [`ScreenClass::ImaxRetrofit`]
+    /// is `1.90:1`; other classes have no single canonical ratio.
+    #[must_use]
+    pub fn aspect_ratio(&self) -> Option<&'static str> {
+        match self {
+            ScreenClass::ImaxClassic => Some("1.43:1"),
+            ScreenClass::ImaxRetrofit => Some("1.90:1"),
+            _ => None,
+        }
+    }
 }
 
 /// Home release medium.
@@ -337,7 +473,8 @@ impl WatchLog {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::VenueFormatMismatch`] if `format.venue() != venue`.
+    /// Returns [`Error::VenueFormatMismatch`] if `format.venue() != venue`, or a
+    /// validation error if the format is internally inconsistent.
     ///
     /// # Panics
     ///
@@ -356,6 +493,7 @@ impl WatchLog {
                 format: serde_json::to_string(&format).unwrap(),
             });
         }
+        format.validate()?;
         let mut log = Self::new(film_id, title, venue, local);
         log.format = Some(format);
         Ok(log)
@@ -383,7 +521,8 @@ impl WatchLog {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::VenueFormatMismatch`] if `format.venue() != venue`.
+    /// Returns [`Error::VenueFormatMismatch`] if `format.venue() != venue`, or a
+    /// validation error if the format is internally inconsistent.
     ///
     /// # Panics
     ///
@@ -401,6 +540,7 @@ impl WatchLog {
                 format: serde_json::to_string(&format).unwrap(),
             });
         }
+        format.validate()?;
         let mut log = Self::from_movie(movie, venue, local);
         log.format = Some(format);
         Ok(log)
@@ -434,7 +574,7 @@ impl WatchLog {
 #[cfg(test)]
 mod tests {
     use super::{
-        Dci, Film, FilmId, Format, HomeMedium, Imax, Projection, ScreenClass, Venue, WatchLog,
+        Dci, Film, FilmId, Flag, Format, HomeMedium, Imax, Projection, ScreenClass, Venue, WatchLog,
     };
     use crate::error::Error;
     use crate::tmdb::Movie;
@@ -586,6 +726,204 @@ mod tests {
                 projection: Projection::Film(Film::Mm70),
                 screen: ScreenClass::Regular,
                 three_d: false,
+                hfr: false,
+                dbox: false,
+            },
+        );
+        assert!(ok.is_ok());
+    }
+
+    #[test]
+    fn projection_allows_flags() {
+        let dci = Projection::Dci(Dci::Laser4K);
+        assert!(dci.allows(Flag::ThreeD));
+        assert!(dci.allows(Flag::Hfr));
+        assert!(dci.allows(Flag::Dbox));
+
+        let imax_4k = Projection::Imax(Imax::Laser4KDual);
+        assert!(imax_4k.allows(Flag::ThreeD));
+        assert!(imax_4k.allows(Flag::Hfr));
+        assert!(!imax_4k.allows(Flag::Dbox));
+
+        let imax_70mm = Projection::Imax(Imax::Film70mm);
+        assert!(!imax_70mm.allows(Flag::ThreeD));
+        assert!(!imax_70mm.allows(Flag::Hfr));
+        assert!(!imax_70mm.allows(Flag::Dbox));
+
+        let film = Projection::Film(Film::Mm35);
+        assert!(film.allows(Flag::ThreeD));
+        assert!(!film.allows(Flag::Hfr));
+        assert!(!film.allows(Flag::Dbox));
+    }
+
+    #[test]
+    fn screen_allows_and_forces_flags() {
+        let regular = ScreenClass::Regular;
+        assert!(regular.allows(Flag::ThreeD));
+        assert!(regular.allows(Flag::Hfr));
+        assert!(regular.allows(Flag::Dbox));
+        assert!(!regular.forces(Flag::ThreeD));
+
+        let vip = ScreenClass::Vip;
+        assert!(vip.allows(Flag::ThreeD));
+        assert!(vip.allows(Flag::Hfr));
+        assert!(!vip.allows(Flag::Dbox));
+
+        let four_dx = ScreenClass::FourDx;
+        assert!(four_dx.allows(Flag::ThreeD));
+        assert!(four_dx.allows(Flag::Hfr));
+        assert!(!four_dx.allows(Flag::Dbox));
+        assert!(four_dx.forces(Flag::ThreeD));
+        assert!(!four_dx.forces(Flag::Hfr));
+
+        assert!(ScreenClass::Ultra4Dx.forces(Flag::ThreeD));
+
+        let screen_x = ScreenClass::ScreenX;
+        assert!(!screen_x.allows(Flag::ThreeD));
+        assert!(!screen_x.allows(Flag::Hfr));
+        assert!(!screen_x.allows(Flag::Dbox));
+
+        let imax_classic = ScreenClass::ImaxClassic;
+        assert!(imax_classic.allows(Flag::ThreeD));
+        assert!(imax_classic.allows(Flag::Hfr));
+        assert!(!imax_classic.allows(Flag::Dbox));
+    }
+
+    #[test]
+    fn imax_aspect_ratio() {
+        assert_eq!(ScreenClass::ImaxClassic.aspect_ratio(), Some("1.43:1"));
+        assert_eq!(ScreenClass::ImaxRetrofit.aspect_ratio(), Some("1.90:1"));
+        assert_eq!(ScreenClass::Regular.aspect_ratio(), None);
+    }
+
+    #[test]
+    fn projection_runs_on_screen() {
+        let imax = Projection::Imax(Imax::Laser4KDual);
+        assert!(imax.runs_on(&ScreenClass::ImaxClassic));
+        assert!(imax.runs_on(&ScreenClass::ImaxRetrofit));
+        assert!(!imax.runs_on(&ScreenClass::Regular));
+        assert!(!imax.runs_on(&ScreenClass::Plf));
+
+        let dci = Projection::Dci(Dci::Laser4K);
+        assert!(dci.runs_on(&ScreenClass::Regular));
+        assert!(dci.runs_on(&ScreenClass::Plf));
+        assert!(dci.runs_on(&ScreenClass::Vip));
+        assert!(dci.runs_on(&ScreenClass::FourDx));
+        assert!(dci.runs_on(&ScreenClass::ScreenX));
+        assert!(dci.runs_on(&ScreenClass::Ultra4Dx));
+        assert!(!dci.runs_on(&ScreenClass::ImaxClassic));
+        assert!(!dci.runs_on(&ScreenClass::ImaxRetrofit));
+
+        let film = Projection::Film(Film::Mm70);
+        assert!(film.runs_on(&ScreenClass::Regular));
+        assert!(!film.runs_on(&ScreenClass::Plf));
+        assert!(!film.runs_on(&ScreenClass::ImaxClassic));
+    }
+
+    #[test]
+    fn validate_theatre_ok() {
+        let ok = Format::Theatre {
+            projection: Projection::Dci(Dci::Laser4K),
+            screen: ScreenClass::Plf,
+            three_d: true,
+            hfr: true,
+            dbox: true,
+        };
+        assert!(ok.validate().is_ok());
+
+        let home = Format::Home {
+            medium: HomeMedium::BluRay,
+        };
+        assert!(home.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_theatre_projection_screen_mismatch() {
+        let bad = Format::Theatre {
+            projection: Projection::Imax(Imax::Laser4KDual),
+            screen: ScreenClass::Plf,
+            three_d: false,
+            hfr: false,
+            dbox: false,
+        };
+        assert!(matches!(
+            bad.validate(),
+            Err(Error::ProjectionScreenMismatch { .. })
+        ));
+
+        let bad2 = Format::Theatre {
+            projection: Projection::Dci(Dci::Laser4K),
+            screen: ScreenClass::ImaxRetrofit,
+            three_d: false,
+            hfr: false,
+            dbox: false,
+        };
+        assert!(matches!(
+            bad2.validate(),
+            Err(Error::ProjectionScreenMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_theatre_forced_flag_missing() {
+        let bad = Format::Theatre {
+            projection: Projection::Dci(Dci::Laser4K),
+            screen: ScreenClass::FourDx,
+            three_d: false,
+            hfr: false,
+            dbox: false,
+        };
+        assert!(matches!(
+            bad.validate(),
+            Err(Error::FlagMismatch {
+                flag: Flag::ThreeD,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn validate_theatre_flag_not_allowed() {
+        let bad = Format::Theatre {
+            projection: Projection::Dci(Dci::Laser4K),
+            screen: ScreenClass::Vip,
+            three_d: false,
+            hfr: false,
+            dbox: true,
+        };
+        assert!(matches!(
+            bad.validate(),
+            Err(Error::FlagMismatch {
+                flag: Flag::Dbox,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn with_format_propagates_validation() {
+        let bad = WatchLog::with_format_now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
+            Format::Theatre {
+                projection: Projection::Imax(Imax::Laser4KDual),
+                screen: ScreenClass::Plf,
+                three_d: false,
+                hfr: false,
+                dbox: false,
+            },
+        );
+        assert!(matches!(bad, Err(Error::ProjectionScreenMismatch { .. })));
+
+        let ok = WatchLog::with_format_now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
+            Format::Theatre {
+                projection: Projection::Dci(Dci::Laser4K),
+                screen: ScreenClass::Plf,
+                three_d: true,
                 hfr: false,
                 dbox: false,
             },

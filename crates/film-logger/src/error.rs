@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::domain::Venue;
+use crate::domain::{Flag, Projection, ScreenClass, Venue};
 
 /// Crate-wide error.
 #[derive(Error, Debug)]
@@ -39,5 +39,26 @@ pub enum Error {
         venue: Venue,
         /// The serialized viewing format that did not match.
         format: String,
+    },
+
+    /// A theatre format's projection cannot be screened in its auditorium class.
+    #[error("projection {projection:?} does not run in screen {screen:?}")]
+    ProjectionScreenMismatch {
+        /// The projection technology.
+        projection: Projection,
+        /// The auditorium class.
+        screen: ScreenClass,
+    },
+
+    /// A theatre format's presentation flag is incompatible with its projection
+    /// and auditorium class.
+    #[error("flag {flag:?} does not match projection {projection:?} in screen {screen:?}")]
+    FlagMismatch {
+        /// The presentation flag.
+        flag: Flag,
+        /// The projection technology.
+        projection: Projection,
+        /// The auditorium class.
+        screen: ScreenClass,
     },
 }

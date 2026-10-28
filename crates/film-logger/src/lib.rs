@@ -11,5 +11,5 @@ pub mod tmdb;
 
 pub use domain::{FilmId, Flag, Rating, Venue, WatchLog};
 pub use error::Error;
-pub use store::Store;
+pub use store::{FilmViewings, Stats, Store, VenueCounts};
 pub use tmdb::{COMPILED_API_KEY, Movie, MovieSummary, SearchPage, TmdbClient};

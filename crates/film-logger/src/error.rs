@@ -64,4 +64,11 @@ pub enum Error {
         /// The auditorium class.
         screen: ScreenClass,
     },
+
+    /// A watch log's `watch_count` is below one.
+    #[error("watch count {count} is less than 1")]
+    InvalidWatchCount {
+        /// The offending watch count.
+        count: i32,
+    },
 }

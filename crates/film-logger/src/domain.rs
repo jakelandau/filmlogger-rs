@@ -384,6 +384,17 @@ pub enum HomeMedium {
     Custom(String),
 }
 
+/// A thumbs-up or thumbs-down rating of a viewing.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Rating {
+    /// Thumbs up.
+    Up,
+    /// Thumbs down.
+    Down,
+}
+
 /// One viewing of a film.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WatchLog {
@@ -405,6 +416,21 @@ pub struct WatchLog {
     pub watched_at: DateTime<Utc>,
     /// Free-form notes.
     pub notes: Option<String>,
+    /// Your thumbs-up/thumbs-down rating, if given.
+    #[serde(default)]
+    pub rating: Option<Rating>,
+    /// Whether this is a rewatch of a film logged previously. Set by the
+    /// store on insert.
+    #[serde(default)]
+    pub rewatch: bool,
+    /// How many times this film has been logged, including this viewing.
+    /// `None` until the store counts prior appearances on insert.
+    #[serde(default)]
+    pub watch_count: Option<i32>,
+    /// The specific source or platform (e.g., a streaming service, or the
+    /// specific cinema for a screening).
+    #[serde(default)]
+    pub source: Option<String>,
     /// How it was viewed, if known.
     pub format: Option<Format>,
 }
@@ -429,6 +455,10 @@ impl WatchLog {
             venue,
             watched_at: local.with_timezone(&Utc),
             notes: None,
+            rating: None,
+            rewatch: false,
+            watch_count: None,
+            source: None,
             format: None,
         }
     }
@@ -459,6 +489,10 @@ impl WatchLog {
             venue,
             watched_at: local.with_timezone(&Utc),
             notes: None,
+            rating: None,
+            rewatch: false,
+            watch_count: None,
+            source: None,
             format: None,
         }
     }
@@ -569,12 +603,49 @@ impl WatchLog {
         self.notes = Some(notes.into());
         self
     }
+
+    /// Attach a thumbs-up/thumbs-down rating (builder-style).
+    #[must_use]
+    pub fn with_rating(mut self, rating: Rating) -> Self {
+        self.rating = Some(rating);
+        self
+    }
+
+    /// Attach a specific source or platform (builder-style).
+    #[must_use]
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.source = Some(source.into());
+        self
+    }
+
+    /// Validate the log's invariants.
+    ///
+    /// Checks that [`Self::watch_count`], if present, is at least one, and
+    /// that [`Self::format`], if present, is internally consistent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidWatchCount`] if `watch_count` is below one, or a
+    /// format validation error if the format is internally inconsistent.
+    #[must_use = "a watch log must be validated before persistence"]
+    pub fn validate(&self) -> Result<(), Error> {
+        if let Some(n) = self.watch_count {
+            if n < 1 {
+                return Err(Error::InvalidWatchCount { count: n });
+            }
+        }
+        if let Some(format) = &self.format {
+            format.validate()?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Dci, Film, FilmId, Flag, Format, HomeMedium, Imax, Projection, ScreenClass, Venue, WatchLog,
+        Dci, Film, FilmId, Flag, Format, HomeMedium, Imax, Projection, Rating, ScreenClass, Venue,
+        WatchLog,
     };
     use crate::error::Error;
     use crate::tmdb::Movie;
@@ -929,5 +1000,51 @@ mod tests {
             },
         );
         assert!(ok.is_ok());
+    }
+
+    #[test]
+    fn rating_serde_roundtrip() {
+        assert_eq!(serde_json::to_string(&Rating::Up).unwrap(), r#""up""#);
+        assert_eq!(serde_json::to_string(&Rating::Down).unwrap(), r#""down""#);
+        let up: Rating = serde_json::from_str(r#""up""#).unwrap();
+        assert_eq!(up, Rating::Up);
+        let down: Rating = serde_json::from_str(r#""down""#).unwrap();
+        assert_eq!(down, Rating::Down);
+    }
+
+    #[test]
+    fn watch_log_details_roundtrip() {
+        let log = WatchLog::now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
+        )
+        .with_rating(Rating::Up)
+        .with_source("IMAX");
+        assert_eq!(log.rating, Some(Rating::Up));
+        assert_eq!(log.source, Some("IMAX".into()));
+        assert!(!log.rewatch);
+        assert_eq!(log.watch_count, None);
+
+        let json = serde_json::to_string(&log).unwrap();
+        let parsed: WatchLog = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, log);
+    }
+
+    #[test]
+    fn validate_watch_count_range() {
+        let mut log = WatchLog::now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
+        );
+        assert!(log.validate().is_ok());
+        log.watch_count = Some(0);
+        assert!(matches!(
+            log.validate(),
+            Err(Error::InvalidWatchCount { .. })
+        ));
+        log.watch_count = Some(3);
+        assert!(log.validate().is_ok());
     }
 }

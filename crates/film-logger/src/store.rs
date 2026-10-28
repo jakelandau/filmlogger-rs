@@ -8,7 +8,7 @@
 
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::domain::WatchLog;
+use crate::domain::{FilmId, WatchLog};
 use crate::error::Error;
 
 /// SQLite-backed watch log store.
@@ -50,6 +50,10 @@ impl Store {
     /// Returns [`Error::Sqlite`] on a write failure, or [`Error::Serde`]
     /// if the log cannot be serialized to JSON.
     pub fn insert(&self, mut log: WatchLog) -> Result<WatchLog, Error> {
+        let prior = self.count_by_film(&log.film_id)?;
+        log.rewatch = prior >= 1;
+        log.watch_count = Some(prior + 1);
+        log.validate()?;
         log.id = 0;
         let watched_at = log.watched_at.to_rfc3339();
         let doc = serde_json::to_string(&log)?;
@@ -113,6 +117,23 @@ impl Store {
             .conn
             .execute("DELETE FROM watch_log WHERE id = ?1", params![id])?;
         Ok(n > 0)
+    }
+
+    /// Count stored logs for `film_id`.
+    fn count_by_film(&self, film_id: &FilmId) -> Result<i32, Error> {
+        let mut stmt = self.conn.prepare("SELECT doc FROM watch_log")?;
+        let docs = stmt.query_map([], |row| row.get::<_, String>(0))?;
+        let mut n = 0;
+        for doc in docs {
+            let doc = doc?;
+            let Ok(log) = serde_json::from_str::<WatchLog>(&doc) else {
+                continue;
+            };
+            if log.film_id == *film_id {
+                n += 1;
+            }
+        }
+        Ok(n)
     }
 
     fn create_table(&self) -> Result<(), Error> {

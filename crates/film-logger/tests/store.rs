@@ -36,3 +36,43 @@ fn data_persists_across_reopen() {
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[0].id, stored_second.id);
 }
+
+#[test]
+fn rewatch_and_watch_count_derived_from_prior_appearances() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("watch_log.db");
+    let store = Store::open(&path).unwrap();
+
+    // First viewing of the film: not a rewatch, watch count 1.
+    let first = store
+        .insert(WatchLog::now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
+        ))
+        .unwrap();
+    assert!(!first.rewatch);
+    assert_eq!(first.watch_count, Some(1));
+
+    // Second viewing of the same film: a rewatch, watch count 2.
+    let second = store
+        .insert(WatchLog::now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
+        ))
+        .unwrap();
+    assert!(second.rewatch);
+    assert_eq!(second.watch_count, Some(2));
+
+    // A different film is counted independently.
+    let other = store
+        .insert(WatchLog::now(
+            FilmId::Imdb("tt0000001".into()),
+            "Other",
+            Venue::Home,
+        ))
+        .unwrap();
+    assert!(!other.rewatch);
+    assert_eq!(other.watch_count, Some(1));
+}

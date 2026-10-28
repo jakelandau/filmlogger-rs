@@ -9,7 +9,7 @@ pub mod error;
 pub mod store;
 pub mod tmdb;
 
-pub use domain::{FilmId, Flag, Venue, WatchLog};
+pub use domain::{FilmId, Flag, Rating, Venue, WatchLog};
 pub use error::Error;
 pub use store::Store;
 pub use tmdb::{COMPILED_API_KEY, Movie, MovieSummary, SearchPage, TmdbClient};

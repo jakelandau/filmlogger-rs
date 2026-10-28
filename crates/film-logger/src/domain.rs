@@ -427,10 +427,6 @@ pub struct WatchLog {
     /// `None` until the store counts prior appearances on insert.
     #[serde(default)]
     pub watch_count: Option<i32>,
-    /// The specific source or platform (e.g., a streaming service, or the
-    /// specific cinema for a screening).
-    #[serde(default)]
-    pub source: Option<String>,
     /// How it was viewed, if known.
     pub format: Option<Format>,
 }
@@ -458,7 +454,6 @@ impl WatchLog {
             rating: None,
             rewatch: false,
             watch_count: None,
-            source: None,
             format: None,
         }
     }
@@ -492,7 +487,6 @@ impl WatchLog {
             rating: None,
             rewatch: false,
             watch_count: None,
-            source: None,
             format: None,
         }
     }
@@ -608,13 +602,6 @@ impl WatchLog {
     #[must_use]
     pub fn with_rating(mut self, rating: Rating) -> Self {
         self.rating = Some(rating);
-        self
-    }
-
-    /// Attach a specific source or platform (builder-style).
-    #[must_use]
-    pub fn with_source(mut self, source: impl Into<String>) -> Self {
-        self.source = Some(source.into());
         self
     }
 
@@ -1019,10 +1006,8 @@ mod tests {
             "Fight Club",
             Venue::Theatre,
         )
-        .with_rating(Rating::Up)
-        .with_source("IMAX");
+        .with_rating(Rating::Up);
         assert_eq!(log.rating, Some(Rating::Up));
-        assert_eq!(log.source, Some("IMAX".into()));
         assert!(!log.rewatch);
         assert_eq!(log.watch_count, None);
 

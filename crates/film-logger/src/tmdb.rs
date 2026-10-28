@@ -1,12 +1,21 @@
 //! TMDB API client and models.
 //!
-//! The client is async (reqwest) and platform-agnostic. It speaks the TMDB
-//! v3 REST API: fetching a full movie by TMDB id, finding a movie by IMDB id,
-//! and searching movies. Images are referenced by path; the full image URLs
-//! are built by [`Movie::poster_url`] and [`Movie::backdrop_url`].
+//! The client wraps [`tmdb_client`], an OpenAPI-generated client for the
+//! TMDB v3 REST API, and re-exposes this crate's own models ([`Movie`],
+//! [`MovieSummary`], [`SearchPage`]) as the public API. It fetches a full
+//! movie by TMDB id, finds a movie by IMDB id, and searches movies. The
+//! TMDB API Key is sent as the `?api_key=` query parameter on every request.
+//! Images are referenced by path; the full image URLs are built by
+//! [`Movie::poster_url`] and [`Movie::backdrop_url`].
 
-use serde::de::DeserializeOwned;
+use std::rc::Rc;
+
 use serde::{Deserialize, Serialize};
+use tmdb_client::apis::configuration::Configuration;
+use tmdb_client::apis::{
+    FindApi, FindApiClient, MoviesApi, MoviesApiClient, SearchApi, SearchApiClient,
+};
+use tmdb_client::models::{MovieDetails, MovieObject, MoviePaginated};
 
 use crate::error::Error;
 
@@ -147,32 +156,22 @@ pub struct SearchPage {
     pub total_results: i32,
 }
 
-/// TMDB's find-by-external-id response wrapper.
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-struct FindResponse {
-    /// The matching movies, if any.
-    movie_results: Vec<MovieSummary>,
-}
-
 /// The TMDB API client.
+///
+/// Wraps the generated [`tmdb_client`], re-exposing this crate's models and
+/// error type. The underlying client is blocking (the generated client is
+/// synchronous), so the methods here are synchronous.
 pub struct TmdbClient {
-    http: reqwest::Client,
-    /// True when the key is a JWT (a TMDB API Read Access Token) and should
-    /// be sent as a `Bearer` token; false when it is the legacy API Key
-    /// (sent as the `?api_key=` query parameter).
-    is_jwt: bool,
-    api_key: String,
-    language: String,
-    base_url: String,
+    find: FindApiClient,
+    movies: MoviesApiClient,
+    search: SearchApiClient,
 }
 
 impl TmdbClient {
     /// Create a client for the live TMDB API.
     ///
-    /// `api_key` may be either the TMDB **API Read Access Token** (a JWT,
-    /// beginning with `eyJ`) or the legacy **API Key**; the client detects
-    /// which and sends it accordingly (Bearer token vs `?api_key=`).
+    /// `api_key` is the TMDB v3 **API Key**, sent as the `?api_key=` query
+    /// parameter on every request.
     pub fn new(api_key: impl Into<String>) -> Self {
         Self::make(api_key, TMDB_BASE_URL)
     }
@@ -194,12 +193,15 @@ impl TmdbClient {
 
     fn make(api_key: impl Into<String>, base_url: impl Into<String>) -> Self {
         let api_key = api_key.into();
+        let config = Rc::new({
+            let mut config = Configuration::new_with_api_key(api_key);
+            config.base_path = base_url.into();
+            config
+        });
         Self {
-            http: reqwest::Client::new(),
-            is_jwt: api_key.starts_with("eyJ"),
-            api_key,
-            language: "en".into(),
-            base_url: base_url.into(),
+            find: FindApiClient::new(Rc::clone(&config)),
+            movies: MoviesApiClient::new(Rc::clone(&config)),
+            search: SearchApiClient::new(Rc::clone(&config)),
         }
     }
 
@@ -210,9 +212,12 @@ impl TmdbClient {
     /// Returns [`Error::Api`] on an HTTP error status (e.g. 404 not found),
     /// [`Error::Serde`] if the response body is not valid JSON, or
     /// [`Error::Http`] on connection, timeout, or other transport errors.
-    pub async fn movie(&self, id: i64) -> Result<Movie, Error> {
-        let path = format!("/movie/{id}");
-        self.get(&path, &[]).await
+    pub fn movie(&self, id: i64) -> Result<Movie, Error> {
+        let details = self
+            .movies
+            .get_movie_details(Self::tmdb_id(id), Some("en"), None, None)
+            .map_err(Self::from_tmdb_error)?;
+        Ok(details.into())
     }
 
     /// Find a movie by its IMDB id (e.g. `tt0137523`).
@@ -223,11 +228,17 @@ impl TmdbClient {
     /// [`Error::Api`] on an HTTP error status, [`Error::Serde`] if the
     /// response body is not valid JSON, or [`Error::Http`] on connection,
     /// timeout, or other transport errors.
-    pub async fn find_by_imdb_id(&self, imdb_id: &str) -> Result<Movie, Error> {
-        let path = format!("/find/{imdb_id}");
-        let find: FindResponse = self.get(&path, &[("external_source", "imdb_id")]).await?;
-        let first = find.movie_results.first().ok_or(Error::FilmNotFound)?;
-        self.movie(first.id).await
+    pub fn find_by_imdb_id(&self, imdb_id: &str) -> Result<Movie, Error> {
+        let find = self
+            .find
+            .get_find_external_id(imdb_id, "imdb_id", Some("en"))
+            .map_err(Self::from_tmdb_error)?;
+        let first = find
+            .movie_results
+            .and_then(|results| results.into_iter().next())
+            .ok_or(Error::FilmNotFound)?;
+        let id = first.id.ok_or(Error::FilmNotFound)?;
+        self.movie(i64::from(id))
     }
 
     /// Search movies by query.
@@ -237,60 +248,117 @@ impl TmdbClient {
     /// Returns [`Error::Api`] on an HTTP error status, [`Error::Serde`] if
     /// the response body is not valid JSON, or [`Error::Http`] on connection,
     /// timeout, or other transport errors.
-    pub async fn search_movies(&self, query: &str, page: i32) -> Result<SearchPage, Error> {
-        let page = page.to_string();
-        self.get("/search/movie", &[("query", query), ("page", &page)])
-            .await
+    pub fn search_movies(&self, query: &str, page: i32) -> Result<SearchPage, Error> {
+        let page = self
+            .search
+            .get_search_movie_paginated(query, None, None, Some("en"), Some(page), None, None)
+            .map_err(Self::from_tmdb_error)?;
+        Ok(page.into())
     }
 
-    async fn get<T: DeserializeOwned>(
-        &self,
-        path: &str,
-        extra: &[(&str, &str)],
-    ) -> Result<T, Error> {
-        let mut params: Vec<(&str, &str)> = vec![("language", self.language.as_str())];
-        if !self.is_jwt {
-            params.push(("api_key", self.api_key.as_str()));
-        }
-        params.extend(extra.iter().copied());
-        let url = format!("{}{path}", self.base_url);
-        let mut req = self.http.get(url).query(&params);
-        if self.is_jwt {
-            req = req.header(
-                reqwest::header::AUTHORIZATION,
-                format!("Bearer {}", self.api_key),
-            );
-        }
-        let resp = req.send().await?;
-        let status = resp.status();
-        if status.is_success() {
-            let value: T = resp.json().await?;
-            Ok(value)
-        } else {
-            let message = resp
-                .json::<ApiError>()
-                .await
-                .ok()
-                .and_then(|e| e.status_message)
-                .unwrap_or_else(|| status.canonical_reason().unwrap_or("error").to_string());
-            Err(Error::Api {
-                status: status.as_u16(),
-                message,
-            })
+    /// A TMDB numeric id as an `i32` (ids fit far below `i32::MAX`).
+    #[allow(clippy::cast_possible_truncation)]
+    fn tmdb_id(id: i64) -> i32 {
+        id as i32
+    }
+
+    /// Map a [`tmdb_client::Error`] onto this crate's [`Error`].
+    fn from_tmdb_error(err: tmdb_client::Error) -> Error {
+        match err {
+            tmdb_client::Error::Reqwest(re) => match re.status() {
+                Some(status) => Error::Api {
+                    status: status.as_u16(),
+                    message: re.to_string(),
+                },
+                None => Error::Http(re),
+            },
+            tmdb_client::Error::Serde(s) => Error::Serde(s),
+            tmdb_client::Error::Io(i) => Error::Io(i),
         }
     }
 }
 
-/// TMDB's error body (for non-success responses).
-#[derive(Deserialize)]
-struct ApiError {
-    #[serde(default)]
-    status_message: Option<String>,
+/// TMDB's movie-detail record, converted to this crate's [`Movie`].
+impl From<MovieDetails> for Movie {
+    fn from(d: MovieDetails) -> Self {
+        Self {
+            id: i64::from(d.id.unwrap_or(0)),
+            title: d.title.unwrap_or_default(),
+            original_title: d.original_title.unwrap_or_default(),
+            original_language: d.original_language.unwrap_or_default(),
+            release_date: d.release_date,
+            runtime: d.runtime,
+            genres: d
+                .genres
+                .unwrap_or_default()
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            overview: d.overview.unwrap_or_default(),
+            tagline: d.tagline,
+            status: d.status.unwrap_or_default(),
+            poster_path: d.poster_path,
+            backdrop_path: d.backdrop_path,
+            vote_average: f64::from(d.vote_average.unwrap_or(0.0)),
+            vote_count: i64::from(d.vote_count.unwrap_or(0)),
+            imdb_id: d.imdb_id,
+            popularity: f64::from(d.popularity.unwrap_or(0.0)),
+            adult: d.adult.unwrap_or(false),
+        }
+    }
+}
+
+/// TMDB's search-result movie, converted to this crate's [`MovieSummary`].
+impl From<MovieObject> for MovieSummary {
+    fn from(o: MovieObject) -> Self {
+        Self {
+            id: i64::from(o.id.unwrap_or(0)),
+            title: o.title.unwrap_or_default(),
+            original_title: o.original_title.unwrap_or_default(),
+            original_language: o.original_language.unwrap_or_default(),
+            release_date: o.release_date,
+            overview: o.overview.unwrap_or_default(),
+            genre_ids: o.genre_ids.unwrap_or_default(),
+            poster_path: o.poster_path,
+            backdrop_path: o.backdrop_path,
+            vote_average: f64::from(o.vote_average.unwrap_or(0.0)),
+            vote_count: i64::from(o.vote_count.unwrap_or(0)),
+            popularity: f64::from(o.popularity.unwrap_or(0.0)),
+            adult: o.adult.unwrap_or(false),
+        }
+    }
+}
+
+/// TMDB's paginated search, converted to this crate's [`SearchPage`].
+impl From<MoviePaginated> for SearchPage {
+    fn from(p: MoviePaginated) -> Self {
+        Self {
+            page: p.page.unwrap_or(0),
+            results: p
+                .results
+                .unwrap_or_default()
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            total_pages: p.total_pages.unwrap_or(0),
+            total_results: p.total_results.unwrap_or(0),
+        }
+    }
+}
+
+/// TMDB's genre, converted to this crate's [`Genre`].
+impl From<tmdb_client::models::Genre> for Genre {
+    fn from(g: tmdb_client::models::Genre) -> Self {
+        Self {
+            id: g.id.unwrap_or(0),
+            name: g.name.unwrap_or_default(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Movie, TmdbClient};
+    use super::{Movie, MovieDetails, MovieObject, MovieSummary};
 
     fn test_movie() -> Movie {
         Movie {
@@ -344,10 +412,34 @@ mod tests {
     }
 
     #[test]
-    fn jwt_uses_bearer_api_key_uses_query() {
-        // A JWT (TMDB API Read Access Token) is sent as a Bearer token.
-        assert!(TmdbClient::new("eyJhbGciOiJIUzI1NiJ9.abc.def").is_jwt);
-        // A legacy API Key (not a JWT) is sent as ?api_key=.
-        assert!(!TmdbClient::new("abcdef1234567890").is_jwt);
+    fn movie_details_convert() {
+        let details = MovieDetails {
+            id: Some(550),
+            title: Some("Fight Club".into()),
+            original_title: Some("Fight Club".into()),
+            original_language: Some("en".into()),
+            release_date: Some("1999-10-15".into()),
+            imdb_id: Some("tt0137523".into()),
+            ..Default::default()
+        };
+        let m: Movie = details.into();
+        assert_eq!(m.id, 550);
+        assert_eq!(m.title, "Fight Club");
+        assert_eq!(m.release_date.as_deref(), Some("1999-10-15"));
+        assert_eq!(m.imdb_id.as_deref(), Some("tt0137523"));
+    }
+
+    #[test]
+    fn movie_object_to_summary() {
+        let o = MovieObject {
+            id: Some(550),
+            title: Some("Fight Club".into()),
+            genre_ids: Some(vec![18]),
+            ..Default::default()
+        };
+        let s: MovieSummary = o.into();
+        assert_eq!(s.id, 550);
+        assert_eq!(s.title, "Fight Club");
+        assert_eq!(s.genre_ids, vec![18]);
     }
 }

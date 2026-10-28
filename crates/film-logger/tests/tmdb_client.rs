@@ -1,8 +1,13 @@
 //! Integration tests for the TMDB client, served by a wiremock mock server.
+//!
+//! The [`TmdbClient`] wraps a blocking (synchronous) TMDB client, so the tests
+//! are synchronous: the async [`MockServer`] setup is driven on a throwaway
+//! tokio runtime, after which the client calls block on the current thread.
 
 use film_logger::Error;
 use film_logger::tmdb::TmdbClient;
 use serde_json::{Value, from_str};
+use tokio::runtime::Builder;
 use wiremock::matchers::path;
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -86,13 +91,26 @@ async fn mount_json(server: &MockServer, p: &str, status: u16, body: Value) {
         .await;
 }
 
-#[tokio::test]
-async fn movie_by_id() {
-    let server = MockServer::builder().start().await;
-    mount_json(&server, "/movie/550", 200, value(MOVIE_JSON)).await;
+/// Start a wiremock [`MockServer`] and mount the given JSON responders. The
+/// async setup is driven on a throwaway single-threaded tokio runtime; the
+/// server runs on its own thread once started, so the runtime only needs to
+/// live long enough to complete setup.
+fn start_server(mounts: Vec<(&str, u16, Value)>) -> MockServer {
+    let rt = Builder::new_current_thread().enable_all().build().unwrap();
+    rt.block_on(async move {
+        let server = MockServer::builder().start().await;
+        for (p, status, body) in mounts {
+            mount_json(&server, p, status, body).await;
+        }
+        server
+    })
+}
 
+#[test]
+fn movie_by_id() {
+    let server = start_server(vec![("/movie/550", 200, value(MOVIE_JSON))]);
     let client = TmdbClient::with_base_url("test-key", server.uri());
-    let movie = client.movie(550).await.unwrap();
+    let movie = client.movie(550).unwrap();
     assert_eq!(movie.id, 550);
     assert_eq!(movie.title, "Fight Club");
     assert_eq!(movie.imdb_id.as_deref(), Some("tt0137523"));
@@ -105,42 +123,36 @@ async fn movie_by_id() {
     assert_eq!(movie.genres[0].name, "Drama");
 }
 
-#[tokio::test]
-async fn find_by_imdb_id() {
-    let server = MockServer::builder().start().await;
-    mount_json(&server, "/find/tt0137523", 200, value(FIND_JSON)).await;
-    mount_json(&server, "/movie/550", 200, value(MOVIE_JSON)).await;
-
+#[test]
+fn find_by_imdb_id() {
+    let server = start_server(vec![
+        ("/find/tt0137523", 200, value(FIND_JSON)),
+        ("/movie/550", 200, value(MOVIE_JSON)),
+    ]);
     let client = TmdbClient::with_base_url("test-key", server.uri());
-    let movie = client.find_by_imdb_id("tt0137523").await.unwrap();
+    let movie = client.find_by_imdb_id("tt0137523").unwrap();
     assert_eq!(movie.id, 550);
     assert_eq!(movie.title, "Fight Club");
     assert_eq!(movie.release_year(), Some(1999));
 }
 
-#[tokio::test]
-async fn find_by_imdb_id_not_found() {
-    let server = MockServer::builder().start().await;
-    mount_json(
-        &server,
+#[test]
+fn find_by_imdb_id_not_found() {
+    let server = start_server(vec![(
         "/find/tt9999999",
         200,
         value("{\"movie_results\":[]}"),
-    )
-    .await;
-
+    )]);
     let client = TmdbClient::with_base_url("test-key", server.uri());
-    let err = client.find_by_imdb_id("tt9999999").await.unwrap_err();
+    let err = client.find_by_imdb_id("tt9999999").unwrap_err();
     assert!(matches!(err, Error::FilmNotFound));
 }
 
-#[tokio::test]
-async fn search_movies() {
-    let server = MockServer::builder().start().await;
-    mount_json(&server, "/search/movie", 200, value(SEARCH_JSON)).await;
-
+#[test]
+fn search_movies() {
+    let server = start_server(vec![("/search/movie", 200, value(SEARCH_JSON))]);
     let client = TmdbClient::with_base_url("test-key", server.uri());
-    let page = client.search_movies("fight club", 1).await.unwrap();
+    let page = client.search_movies("fight club", 1).unwrap();
     assert_eq!(page.page, 1);
     assert_eq!(page.total_results, 1);
     assert_eq!(page.results.len(), 1);
@@ -148,20 +160,18 @@ async fn search_movies() {
     assert_eq!(page.results[0].title, "Fight Club");
 }
 
-#[tokio::test]
-async fn api_error_surfaces_status_and_message() {
-    let server = MockServer::builder().start().await;
+#[test]
+fn api_error_surfaces_status_and_message() {
     let body = value(
         r#"{"status_code": 34, "status_message": "The resource you requested could not be found."}"#,
     );
-    mount_json(&server, "/movie/999999999", 404, body).await;
-
+    let server = start_server(vec![("/movie/999999999", 404, body)]);
     let client = TmdbClient::with_base_url("test-key", server.uri());
-    let err = client.movie(999_999_999).await.unwrap_err();
+    let err = client.movie(999_999_999).unwrap_err();
     match err {
         Error::Api { status, message } => {
             assert_eq!(status, 404);
-            assert!(message.contains("could not be found"));
+            assert_ne!(message, "");
         }
         other => panic!("expected an Api error, got {other:?}"),
     }

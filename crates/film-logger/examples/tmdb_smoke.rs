@@ -9,15 +9,14 @@
 
 use film_logger::{Store, TmdbClient, Venue, WatchLog};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = TmdbClient::from_compiled_key().expect(
         "set TMDB_API_KEY in the build environment before building (locally: \
          $env:TMDB_API_KEY=\"...\"; on CI: a GitHub Actions secret)",
     );
 
     // A full movie by its TMDB numeric id (Fight Club is 550).
-    let movie = client.movie(550).await?;
+    let movie = client.movie(550)?;
     println!(
         "movie: {} ({}) runtime={}min vote={}",
         movie.title,
@@ -27,12 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // The same film looked up by IMDB id.
-    let found = client.find_by_imdb_id("tt0137523").await?;
+    let found = client.find_by_imdb_id("tt0137523")?;
     assert_eq!(found.id, 550);
     println!("find_by_imdb: {} -> id {}", found.title, found.id);
 
     // A search.
-    let page = client.search_movies("fight club", 1).await?;
+    let page = client.search_movies("fight club", 1)?;
     println!(
         "search: {} result(s); first: {}",
         page.total_results,

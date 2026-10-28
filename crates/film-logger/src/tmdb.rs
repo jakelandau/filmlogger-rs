@@ -147,6 +147,14 @@ pub struct SearchPage {
     pub total_results: i32,
 }
 
+/// TMDB's find-by-external-id response wrapper.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+struct FindResponse {
+    /// The matching movies, if any.
+    movie_results: Vec<MovieSummary>,
+}
+
 /// The TMDB API client.
 pub struct TmdbClient {
     http: reqwest::Client,
@@ -200,9 +208,8 @@ impl TmdbClient {
     /// # Errors
     ///
     /// Returns [`Error::Api`] on an HTTP error status (e.g. 404 not found),
-    /// [`Error::Json`] if the response body is not valid JSON,
-    /// [`Error::Transport`] on connection or timeout errors, or
-    /// [`Error::Http`] for other transport errors.
+    /// [`Error::Serde`] if the response body is not valid JSON, or
+    /// [`Error::Http`] on connection, timeout, or other transport errors.
     pub async fn movie(&self, id: i64) -> Result<Movie, Error> {
         let path = format!("/movie/{id}");
         self.get(&path, &[]).await
@@ -212,21 +219,24 @@ impl TmdbClient {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Api`] on an HTTP error status, [`Error::Json`] if the
-    /// response body is not valid JSON, [`Error::Transport`] on connection or
-    /// timeout errors, or [`Error::Http`] for other transport errors.
+    /// Returns [`Error::FilmNotFound`] if TMDB has no movie for the IMDB id,
+    /// [`Error::Api`] on an HTTP error status, [`Error::Serde`] if the
+    /// response body is not valid JSON, or [`Error::Http`] on connection,
+    /// timeout, or other transport errors.
     pub async fn find_by_imdb_id(&self, imdb_id: &str) -> Result<Movie, Error> {
         let path = format!("/find/{imdb_id}");
-        self.get(&path, &[("type", "movie")]).await
+        let find: FindResponse = self.get(&path, &[("external_source", "imdb_id")]).await?;
+        let first = find.movie_results.first().ok_or(Error::FilmNotFound)?;
+        self.movie(first.id).await
     }
 
     /// Search movies by query.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Api`] on an HTTP error status, [`Error::Json`] if the
-    /// response body is not valid JSON, [`Error::Transport`] on connection or
-    /// timeout errors, or [`Error::Http`] for other transport errors.
+    /// Returns [`Error::Api`] on an HTTP error status, [`Error::Serde`] if
+    /// the response body is not valid JSON, or [`Error::Http`] on connection,
+    /// timeout, or other transport errors.
     pub async fn search_movies(&self, query: &str, page: i32) -> Result<SearchPage, Error> {
         let page = page.to_string();
         self.get("/search/movie", &[("query", query), ("page", &page)])

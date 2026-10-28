@@ -26,6 +26,30 @@ const MOVIE_JSON: &str = r#"{
     "adult": false
 }"#;
 
+const FIND_JSON: &str = r#"{
+    "movie_results": [
+        {
+            "id": 550,
+            "title": "Fight Club",
+            "original_title": "Fight Club",
+            "original_language": "en",
+            "release_date": "1999-10-15",
+            "overview": "A story about two men.",
+            "genre_ids": [18],
+            "poster_path": "/abc.jpg",
+            "backdrop_path": "/def.jpg",
+            "vote_average": 8.433,
+            "vote_count": 26279,
+            "popularity": 73.433,
+            "adult": false
+        }
+    ],
+    "person_results": [],
+    "tv_results": [],
+    "tv_episode_results": [],
+    "tv_season_results": []
+}"#;
+
 const SEARCH_JSON: &str = r#"{
     "page": 1,
     "results": [
@@ -84,12 +108,30 @@ async fn movie_by_id() {
 #[tokio::test]
 async fn find_by_imdb_id() {
     let server = MockServer::builder().start().await;
-    mount_json(&server, "/find/tt0137523", 200, value(MOVIE_JSON)).await;
+    mount_json(&server, "/find/tt0137523", 200, value(FIND_JSON)).await;
+    mount_json(&server, "/movie/550", 200, value(MOVIE_JSON)).await;
 
     let client = TmdbClient::with_base_url("test-key", server.uri());
     let movie = client.find_by_imdb_id("tt0137523").await.unwrap();
     assert_eq!(movie.id, 550);
     assert_eq!(movie.title, "Fight Club");
+    assert_eq!(movie.release_year(), Some(1999));
+}
+
+#[tokio::test]
+async fn find_by_imdb_id_not_found() {
+    let server = MockServer::builder().start().await;
+    mount_json(
+        &server,
+        "/find/tt9999999",
+        200,
+        value("{\"movie_results\":[]}"),
+    )
+    .await;
+
+    let client = TmdbClient::with_base_url("test-key", server.uri());
+    let err = client.find_by_imdb_id("tt9999999").await.unwrap_err();
+    assert!(matches!(err, Error::FilmNotFound));
 }
 
 #[tokio::test]

@@ -31,6 +31,9 @@ pub enum Error {
         /// A human-readable message.
         message: String,
     },
+    /// The requested film was not found.
+    #[error("film not found")]
+    FilmNotFound,
 
     /// A viewing format was attached to a log whose venue it does not match.
     #[error("viewing format does not match venue")]

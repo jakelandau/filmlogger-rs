@@ -1,0 +1,22 @@
+[package]
+name = "film-logger-desktop"
+version = "0.1.0"
+description = "FilmLogger desktop application (Tauri)"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "film_logger_desktop"
+path = "src/lib.rs"
+
+[dependencies]
+film-logger = { path = "../../../crates/film-logger" }
+tauri = { version = "2", features = [] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[lints]
+workspace = true

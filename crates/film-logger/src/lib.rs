@@ -6,10 +6,15 @@
 
 pub mod domain;
 pub mod error;
+pub mod service;
 pub mod store;
 pub mod tmdb;
 
-pub use domain::{FilmId, Flag, Rating, Venue, WatchLog};
+pub use domain::{
+    Certifications, Dci, Film, FilmId, Flag, Format, HomeMedium, Imax, Projection, Rating,
+    RatingBoard, ScreenClass, Settings, Venue, WatchLog,
+};
 pub use error::Error;
+pub use service::FilmLogger;
 pub use store::{FilmViewings, Stats, Store, VenueCounts};
-pub use tmdb::{COMPILED_API_KEY, Movie, MovieSummary, SearchPage, TmdbClient};
+pub use tmdb::{COMPILED_API_KEY, Genre, Movie, MovieSummary, SearchPage, TmdbClient};

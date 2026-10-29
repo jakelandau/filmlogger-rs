@@ -10,26 +10,35 @@ use std::collections::{BTreeMap, HashMap};
 
 use chrono::Datelike;
 use rusqlite::{Connection, OptionalExtension, params};
+use serde::Serialize;
 
-use crate::domain::{FilmId, Venue, WatchLog};
+use crate::domain::{FilmId, RatingBoard, Settings, Venue, WatchLog};
 use crate::error::Error;
 
+/// The `settings` table row key for the [`Settings`] document.
+const SETTINGS_KEY: &str = "settings";
+
+/// The schema version this build creates and understands.
+const SCHEMA_VERSION: i64 = 1;
+
 /// SQLite-backed watch log store.
+#[derive(Debug)]
 pub struct Store {
     conn: Connection,
 }
 
 impl Store {
-    /// Open (or create) a store at `path`, creating the schema if needed.
+    /// Open (or create) a store at `path`, migrating the schema if needed.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Sqlite`] if the database cannot be opened or the
-    /// schema cannot be created.
+    /// Returns [`Error::Sqlite`] if the database cannot be opened or
+    /// migrated, or [`Error::SchemaTooNew`] if the database's schema version
+    /// is newer than this build understands.
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self, Error> {
         let conn = Connection::open(path)?;
         let store = Self { conn };
-        store.create_table()?;
+        store.migrate()?;
         Ok(store)
     }
 
@@ -42,7 +51,7 @@ impl Store {
     pub fn open_in_memory() -> Result<Self, Error> {
         let conn = Connection::open_in_memory()?;
         let store = Self { conn };
-        store.create_table()?;
+        store.migrate()?;
         Ok(store)
     }
 
@@ -182,20 +191,133 @@ impl Store {
         Ok(n)
     }
 
-    fn create_table(&self) -> Result<(), Error> {
+    /// Update a log by its row id, recomputing the store-maintained fields
+    /// (`rewatch`, `watch_count`) against the store's current contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::LogNotFound`] if `log.id` is not stored,
+    /// [`Error::Sqlite`] on a write failure, or a validation error if the
+    /// log is invalid.
+    pub fn update(&self, mut log: WatchLog) -> Result<WatchLog, Error> {
+        let Some(existing) = self.get(log.id)? else {
+            return Err(Error::LogNotFound { id: log.id });
+        };
+        let mut prior = self.count_by_film(&log.film_id)?;
+        if existing.film_id == log.film_id {
+            // The stored row is this log; exclude it from the count.
+            prior -= 1;
+        }
+        log.rewatch = prior >= 1;
+        log.watch_count = Some(prior + 1);
+        log.validate()?;
+        let watched_at = log.watched_at.to_rfc3339();
+        let doc = serde_json::to_string(&log)?;
+        self.conn.execute(
+            "UPDATE watch_log SET watched_at = ?1, doc = ?2 WHERE id = ?3",
+            params![watched_at, doc, log.id],
+        )?;
+        Ok(log)
+    }
+
+    /// The database file path this store is open on (`:memory:` for
+    /// in-memory stores).
+    #[must_use]
+    pub fn path(&self) -> &std::path::Path {
+        match self.conn.path() {
+            Some(path) => std::path::Path::new(path),
+            None => std::path::Path::new(":memory:"),
+        }
+    }
+
+    /// The stored [`Settings`].
+    ///
+    /// The default when nothing is stored yet.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Sqlite`] on a read failure, or [`Error::Serde`] if
+    /// the stored document cannot be deserialized.
+    pub fn settings(&self) -> Result<Settings, Error> {
+        let value: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![SETTINGS_KEY],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match value {
+            Some(value) => Ok(serde_json::from_str(&value)?),
+            None => Ok(Settings::default()),
+        }
+    }
+
+    /// Persist the selected rating board (other settings keep their stored
+    /// values).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Sqlite`] on a write failure, or [`Error::Serde`]
+    /// if the settings cannot be serialized to JSON.
+    pub fn set_selected_board(&self, board: RatingBoard) -> Result<(), Error> {
+        let mut settings = self.settings()?;
+        settings.selected_board = board;
+        let value = serde_json::to_string(&settings)?;
+        self.conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![SETTINGS_KEY, value],
+        )?;
+        Ok(())
+    }
+
+    /// Consolidate any write-ahead log into the main database file.
+    ///
+    /// After this, the database file may be copied safely (export).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Sqlite`] on a failure.
+    pub fn checkpoint(&self) -> Result<(), Error> {
+        self.conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+        Ok(())
+    }
+
+    /// Apply pending migrations for `conn`.
+    fn migrate(&self) -> Result<(), Error> {
+        let version: i64 = self
+            .conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if version == 0 {
+            self.create_schema()?;
+        } else if version > SCHEMA_VERSION {
+            return Err(Error::SchemaTooNew { version });
+        }
+        Ok(())
+    }
+
+    /// Create the schema and stamp [`SCHEMA_VERSION`].
+    fn create_schema(&self) -> Result<(), Error> {
         self.conn.execute_batch(
             r"CREATE TABLE IF NOT EXISTS watch_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 watched_at TEXT NOT NULL,
                 doc TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             );",
         )?;
+        self.conn
+            .pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(())
     }
 }
 
 /// Aggregated statistics over all stored watch logs.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Stats {
     /// Total viewings (every watch log).
     pub total_viewings: usize,
@@ -228,7 +350,7 @@ impl Stats {
 }
 
 /// Viewings broken down by venue.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct VenueCounts {
     /// Theatrical screenings.
     pub theatre: usize,
@@ -237,7 +359,7 @@ pub struct VenueCounts {
 }
 
 /// A single film's viewing count, for ranked reports.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FilmViewings {
     /// Denormalized film title.
     pub title: String,

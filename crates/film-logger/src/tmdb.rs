@@ -17,6 +17,7 @@ use tmdb_client::apis::{
 };
 use tmdb_client::models::{MovieDetails, MovieObject, MoviePaginated};
 
+use crate::domain::Certifications;
 use crate::error::Error;
 
 /// Base URL of the live TMDB API.
@@ -81,6 +82,8 @@ pub struct Movie {
     pub popularity: f64,
     /// Whether the film is marked adult.
     pub adult: bool,
+    /// The board certifications, if fetched from the film's release dates.
+    pub certifications: Option<Certifications>,
 }
 
 impl Movie {
@@ -98,7 +101,7 @@ impl Movie {
     pub fn poster_url(&self) -> Option<String> {
         self.poster_path
             .as_deref()
-            .map(|p| format!("{IMAGE_BASE_URL}/original{p}"))
+            .map(|p| image_url(p, "original"))
     }
 
     /// The full URL for the backdrop image, if a backdrop path is known.
@@ -106,8 +109,15 @@ impl Movie {
     pub fn backdrop_url(&self) -> Option<String> {
         self.backdrop_path
             .as_deref()
-            .map(|p| format!("{IMAGE_BASE_URL}/original{p}"))
+            .map(|p| image_url(p, "original"))
     }
+}
+
+/// A full URL for a TMDB image `path` at `size` (e.g. `"w92"`, `"w342"`,
+/// `"w780"`, `"original"`).
+#[must_use]
+pub fn image_url(path: &str, size: &str) -> String {
+    format!("{IMAGE_BASE_URL}/{size}{path}")
 }
 
 /// A lightweight movie record (search results).
@@ -165,7 +175,23 @@ pub struct TmdbClient {
     find: FindApiClient,
     movies: MoviesApiClient,
     search: SearchApiClient,
+    /// The API key, for requests this crate makes directly (release dates).
+    api_key: String,
+    /// The base URL, for requests this crate makes directly.
+    base_url: String,
+    /// A direct blocking HTTP client, sharing the generated client's TLS.
+    raw: reqwest::blocking::Client,
 }
+
+/// The generated [`tmdb_client`] `*ApiClient`s hold their configuration in an
+/// [`Rc`], which is not [`Send`]. The configuration is written once in
+/// [`TmdbClient::make`] and only read afterwards, and the shared
+/// `reqwest::blocking::Client` is itself `Send` + `Sync`, so sharing a
+/// [`TmdbClient`] across threads is safe.
+#[allow(unsafe_code)]
+unsafe impl Send for TmdbClient {}
+#[allow(unsafe_code)]
+unsafe impl Sync for TmdbClient {}
 
 impl TmdbClient {
     /// Create a client for the live TMDB API.
@@ -193,15 +219,19 @@ impl TmdbClient {
 
     fn make(api_key: impl Into<String>, base_url: impl Into<String>) -> Self {
         let api_key = api_key.into();
+        let base_url = base_url.into();
         let config = Rc::new({
-            let mut config = Configuration::new_with_api_key(api_key);
-            config.base_path = base_url.into();
+            let mut config = Configuration::new_with_api_key(api_key.clone());
+            config.base_path.clone_from(&base_url);
             config
         });
         Self {
             find: FindApiClient::new(Rc::clone(&config)),
             movies: MoviesApiClient::new(Rc::clone(&config)),
             search: SearchApiClient::new(Rc::clone(&config)),
+            api_key,
+            base_url,
+            raw: config.client.clone(),
         }
     }
 
@@ -217,7 +247,9 @@ impl TmdbClient {
             .movies
             .get_movie_details(Self::tmdb_id(id), Some("en"), None, None)
             .map_err(Self::from_tmdb_error)?;
-        Ok(details.into())
+        let mut movie: Movie = details.into();
+        movie.certifications = self.release_certifications(id);
+        Ok(movie)
     }
 
     /// Find a movie by its IMDB id (e.g. `tt0137523`).
@@ -256,6 +288,31 @@ impl TmdbClient {
         Ok(page.into())
     }
 
+    /// Fetch the film's board certifications from its release dates.
+    ///
+    /// TMDB's release-dates response carries per-region `certification`
+    /// fields, which the generated models do not model; this direct request
+    /// parses only those. A `None` (rather than `Err`) keeps [`Self::movie`]
+    /// resilient when the endpoint is missing for a film.
+    fn release_certifications(&self, id: i64) -> Option<Certifications> {
+        let url = format!(
+            "{}/movie/{id}/release_dates",
+            self.base_url,
+            id = Self::tmdb_id(id)
+        );
+        let response: ReleaseDatesResponse = self
+            .raw
+            .get(url)
+            .query(&[("language", "en"), ("api_key", self.api_key.as_str())])
+            .send()
+            .ok()?
+            .error_for_status()
+            .ok()?
+            .json()
+            .ok()?;
+        Some(response.certifications())
+    }
+
     /// A TMDB numeric id as an `i32` (ids fit far below `i32::MAX`).
     #[allow(clippy::cast_possible_truncation)]
     fn tmdb_id(id: i64) -> i32 {
@@ -276,6 +333,60 @@ impl TmdbClient {
             tmdb_client::Error::Io(i) => Error::Io(i),
         }
     }
+}
+
+/// TMDB's release-dates response: per-region entries whose releases carry
+/// board certifications. Parsed directly because the generated models do
+/// not carry `certification`.
+#[derive(Debug, Deserialize)]
+struct ReleaseDatesResponse {
+    #[serde(default)]
+    results: Vec<RegionRelease>,
+}
+
+impl ReleaseDatesResponse {
+    /// The supported-board certifications, from each region's first
+    /// non-blank certification.
+    fn certifications(&self) -> Certifications {
+        let mut certifications = Certifications::default();
+        for region in &self.results {
+            if region.iso_3166_1.eq_ignore_ascii_case("US") {
+                certifications.us = region.certification().map(String::from);
+            } else if region.iso_3166_1.eq_ignore_ascii_case("GB") {
+                certifications.gb = region.certification().map(String::from);
+            } else if region.iso_3166_1.eq_ignore_ascii_case("DE") {
+                certifications.de = region.certification().map(String::from);
+            }
+        }
+        certifications
+    }
+}
+
+/// One release-dates region entry.
+#[derive(Debug, Deserialize)]
+struct RegionRelease {
+    #[serde(default)]
+    iso_3166_1: String,
+    /// The region's releases, in the order TMDB reports them.
+    #[serde(default)]
+    release_dates: Vec<ReleaseDate>,
+}
+
+impl RegionRelease {
+    /// The first non-blank certification across the region's releases.
+    fn certification(&self) -> Option<&str> {
+        self.release_dates
+            .iter()
+            .find_map(|release| release.certification.as_deref().filter(|c| !c.is_empty()))
+    }
+}
+
+/// One release event in a region.
+#[derive(Debug, Deserialize)]
+struct ReleaseDate {
+    /// The board certification for this release, when known.
+    #[serde(default)]
+    certification: Option<String>,
 }
 
 /// TMDB's movie-detail record, converted to this crate's [`Movie`].
@@ -304,6 +415,8 @@ impl From<MovieDetails> for Movie {
             imdb_id: d.imdb_id,
             popularity: f64::from(d.popularity.unwrap_or(0.0)),
             adult: d.adult.unwrap_or(false),
+            // Fetched separately in `TmdbClient::movie`.
+            certifications: None,
         }
     }
 }
@@ -358,7 +471,7 @@ impl From<tmdb_client::models::Genre> for Genre {
 
 #[cfg(test)]
 mod tests {
-    use super::{Movie, MovieDetails, MovieObject, MovieSummary};
+    use super::{Certifications, Movie, MovieDetails, MovieObject, MovieSummary};
 
     fn test_movie() -> Movie {
         Movie {
@@ -379,6 +492,7 @@ mod tests {
             imdb_id: Some("tt0137523".into()),
             popularity: 73.433,
             adult: false,
+            certifications: None,
         }
     }
 
@@ -427,6 +541,45 @@ mod tests {
         assert_eq!(m.title, "Fight Club");
         assert_eq!(m.release_date.as_deref(), Some("1999-10-15"));
         assert_eq!(m.imdb_id.as_deref(), Some("tt0137523"));
+    }
+
+    #[test]
+    fn image_url_builds() {
+        assert_eq!(
+            super::image_url("/abc.jpg", "w342"),
+            "https://image.tmdb.org/t/p/w342/abc.jpg"
+        );
+        assert_eq!(
+            test_movie().poster_url().as_deref(),
+            Some("https://image.tmdb.org/t/p/original/abc.jpg")
+        );
+    }
+
+    #[test]
+    fn release_dates_parse_regions() {
+        let json = r#"{
+            "id": 550,
+            "results": [
+                {
+                    "iso_3166_1": "US",
+                    "release_dates": [
+                        { "certification": "R", "release_date": "1999-10-15T00:00:00.000Z", "type": 3 },
+                        { "certification": "", "release_date": "2003-01-01T00:00:00.000Z", "type": 3 }
+                    ]
+                },
+                { "iso_3166_1": "GB", "release_dates": [ { "certification": "15" } ] },
+                { "iso_3166_1": "DE", "release_dates": [ { "certification": "FSK 16" } ] },
+                { "iso_3166_1": "JP", "release_dates": [ { "certification": "R12+" } ] },
+                { "iso_3166_1": "AU", "release_dates": [] }
+            ]
+        }"#;
+        let response: super::ReleaseDatesResponse = serde_json::from_str(json).unwrap();
+        let certifications = response.certifications();
+        assert_eq!(certifications.us.as_deref(), Some("R"));
+        assert_eq!(certifications.gb.as_deref(), Some("15"));
+        assert_eq!(certifications.de.as_deref(), Some("FSK 16"));
+        // Unsupported regions (JP) and release-less regions (AU) are not stored.
+        assert!(!certifications.is_empty());
     }
 
     #[test]

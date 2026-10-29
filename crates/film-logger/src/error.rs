@@ -35,6 +35,24 @@ pub enum Error {
     #[error("film not found")]
     FilmNotFound,
 
+    /// A watch log id was not found in the store.
+    #[error("log not found: {id}")]
+    LogNotFound {
+        /// The offending log id.
+        id: i64,
+    },
+
+    /// The database schema is newer than this build understands.
+    #[error("database schema version {version} is newer than this build supports")]
+    SchemaTooNew {
+        /// The schema version found in the database.
+        version: i64,
+    },
+
+    /// No TMDB API key was baked in at compile time.
+    #[error("no TMDB API key was compiled in")]
+    NoCompiledApiKey,
+
     /// A viewing format was attached to a log whose venue it does not match.
     #[error("viewing format does not match venue")]
     VenueFormatMismatch {

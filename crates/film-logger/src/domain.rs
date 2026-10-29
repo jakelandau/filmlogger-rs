@@ -395,6 +395,82 @@ pub enum Rating {
     Down,
 }
 
+/// The board whose certification is shown as a film's content rating.
+///
+/// Distinct from [`Rating`] (a thumbs up/down of a viewing): a board
+/// certifies a *film* (e.g. `R`, `15`, `FSK 16`). Each board maps to the ISO
+/// 3166-1 region of the country that runs it.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RatingBoard {
+    /// The US MPAA rating board.
+    Mpa,
+    /// The British Board of Film Classification.
+    Bbfc,
+    /// The German FSK (Freiwillige Selbstkontrolle der Filmwirtschaft).
+    Fsk,
+}
+
+impl RatingBoard {
+    /// The ISO 3166-1 alpha-2 region code of the country this board runs.
+    #[must_use]
+    pub const fn iso_region(&self) -> &'static str {
+        match self {
+            RatingBoard::Mpa => "US",
+            RatingBoard::Bbfc => "GB",
+            RatingBoard::Fsk => "DE",
+        }
+    }
+}
+
+/// A film's board certifications, by supported board.
+///
+/// A `None` slot means the board's certification is unknown for the film.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Certifications {
+    /// The US (MPAA) certification, e.g. `"R"`.
+    pub us: Option<String>,
+    /// The UK (BBFC) certification, e.g. `"15"`.
+    pub gb: Option<String>,
+    /// The German (FSK) certification, e.g. `"FSK 16"`.
+    pub de: Option<String>,
+}
+
+impl Certifications {
+    /// The certification for `board`, if known.
+    #[must_use]
+    pub fn certification_for(&self, board: &RatingBoard) -> Option<&str> {
+        match board {
+            RatingBoard::Mpa => self.us.as_deref(),
+            RatingBoard::Bbfc => self.gb.as_deref(),
+            RatingBoard::Fsk => self.de.as_deref(),
+        }
+    }
+
+    /// True when no board has a certification.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.us.is_none() && self.gb.is_none() && self.de.is_none()
+    }
+}
+
+/// User preferences, persisted with the log (in the same database).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Settings {
+    /// The board whose certification the list view shows.
+    pub selected_board: RatingBoard,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            selected_board: RatingBoard::Mpa,
+        }
+    }
+}
+
 /// One viewing of a film.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WatchLog {
@@ -410,6 +486,12 @@ pub struct WatchLog {
     pub title: String,
     /// Denormalized release year, if known.
     pub release_year: Option<i32>,
+    /// Denormalized TMDB poster path, if known.
+    #[serde(default)]
+    pub poster_path: Option<String>,
+    /// Denormalized board certifications, if fetched.
+    #[serde(default)]
+    pub certifications: Option<Certifications>,
     /// Where it was watched.
     pub venue: Venue,
     /// The instant the film was watched, in UTC.
@@ -448,6 +530,8 @@ impl WatchLog {
             tmdb_id: None,
             title: title.into(),
             release_year: None,
+            poster_path: None,
+            certifications: None,
             venue,
             watched_at: local.with_timezone(&Utc),
             notes: None,
@@ -467,7 +551,7 @@ impl WatchLog {
     ///
     /// `film_id` is derived from the movie: its IMDB id when present, else its
     /// TMDB id. Denormalized fields (`imdb_id`, `tmdb_id`, `release_year`,
-    /// `title`) are filled from the movie.
+    /// `title`, `poster_path`, `certifications`) are filled from the movie.
     #[must_use]
     pub fn from_movie(movie: &Movie, venue: Venue, local: DateTime<Local>) -> Self {
         let film_id = match &movie.imdb_id {
@@ -481,6 +565,8 @@ impl WatchLog {
             tmdb_id: Some(movie.id),
             title: movie.title.clone(),
             release_year: movie.release_year(),
+            poster_path: movie.poster_path.clone(),
+            certifications: movie.certifications.clone(),
             venue,
             watched_at: local.with_timezone(&Utc),
             notes: None,
@@ -631,8 +717,8 @@ impl WatchLog {
 #[cfg(test)]
 mod tests {
     use super::{
-        Dci, Film, FilmId, Flag, Format, HomeMedium, Imax, Projection, Rating, ScreenClass, Venue,
-        WatchLog,
+        Certifications, Dci, Film, FilmId, Flag, Format, HomeMedium, Imax, Projection, Rating,
+        RatingBoard, ScreenClass, Settings, Venue, WatchLog,
     };
     use crate::error::Error;
     use crate::tmdb::Movie;
@@ -657,6 +743,7 @@ mod tests {
             imdb_id,
             popularity: 73.433,
             adult: false,
+            certifications: None,
         }
     }
 
@@ -1031,5 +1118,51 @@ mod tests {
         ));
         log.watch_count = Some(3);
         assert!(log.validate().is_ok());
+    }
+
+    #[test]
+    fn rating_board_iso_region() {
+        assert_eq!(RatingBoard::Mpa.iso_region(), "US");
+        assert_eq!(RatingBoard::Bbfc.iso_region(), "GB");
+        assert_eq!(RatingBoard::Fsk.iso_region(), "DE");
+    }
+
+    #[test]
+    fn certification_lookup_and_roundtrip() {
+        let certifications = Certifications {
+            us: Some("R".into()),
+            gb: Some("15".into()),
+            de: Some("FSK 16".into()),
+        };
+        assert_eq!(
+            certifications.certification_for(&RatingBoard::Mpa),
+            Some("R")
+        );
+        assert_eq!(
+            certifications.certification_for(&RatingBoard::Bbfc),
+            Some("15")
+        );
+        assert_eq!(
+            certifications.certification_for(&RatingBoard::Fsk),
+            Some("FSK 16")
+        );
+
+        let json = serde_json::to_string(&certifications).unwrap();
+        let parsed: Certifications = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, certifications);
+    }
+
+    #[test]
+    fn settings_default_and_serde_default() {
+        assert_eq!(Settings::default().selected_board, RatingBoard::Mpa);
+        // A document without the field (an older log) deserializes to the default.
+        let parsed: Settings = serde_json::from_str("{}").unwrap();
+        assert_eq!(parsed, Settings::default());
+        let settings = Settings {
+            selected_board: RatingBoard::Fsk,
+        };
+        let json = serde_json::to_string(&settings).unwrap();
+        let parsed: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, settings);
     }
 }

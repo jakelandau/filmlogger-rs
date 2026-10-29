@@ -1,7 +1,7 @@
 //! Integration tests for the SQLite store, using a temp file to verify
 //! persistence across store instances.
 
-use film_logger::{FilmId, Store, Venue, WatchLog};
+use film_logger::{Error, FilmId, RatingBoard, Store, Venue, WatchLog};
 
 #[test]
 fn data_persists_across_reopen() {
@@ -75,4 +75,87 @@ fn rewatch_and_watch_count_derived_from_prior_appearances() {
         .unwrap();
     assert!(!other.rewatch);
     assert_eq!(other.watch_count, Some(1));
+}
+
+#[test]
+fn settings_default_and_selected_board_persists() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("watch_log.db");
+    let store = Store::open(&path).unwrap();
+
+    // Nothing stored yet: the default board.
+    assert_eq!(store.settings().unwrap().selected_board, RatingBoard::Mpa);
+
+    store.set_selected_board(RatingBoard::Fsk).unwrap();
+    assert_eq!(store.settings().unwrap().selected_board, RatingBoard::Fsk);
+
+    // Reopen: the selection persists.
+    let store = Store::open(&path).unwrap();
+    assert_eq!(store.settings().unwrap().selected_board, RatingBoard::Fsk);
+}
+
+#[test]
+fn update_recomputes_rewatch_and_watch_count() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("watch_log.db");
+    let store = Store::open(&path).unwrap();
+
+    let first = store
+        .insert(WatchLog::now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
+        ))
+        .unwrap();
+    assert_eq!(first.watch_count, Some(1));
+
+    // A second viewing of the same film.
+    let second = store
+        .insert(WatchLog::now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
+        ))
+        .unwrap();
+    assert!(second.rewatch);
+    assert_eq!(second.watch_count, Some(2));
+
+    // Updating the first log recounts it: the film now has another viewing
+    // on record, so the update flags it as a rewatch with the running count.
+    let mut updated = first.clone();
+    updated.notes = Some("edited".into());
+    let updated = store.update(updated).unwrap();
+    assert!(updated.rewatch);
+    assert_eq!(updated.watch_count, Some(2));
+    assert_eq!(updated.notes.as_deref(), Some("edited"));
+
+    // Updating a log to a different film recounts against that film.
+    let mut switched = updated;
+    switched.film_id = FilmId::Imdb("tt0000001".into());
+    let switched = store.update(switched).unwrap();
+    assert!(!switched.rewatch);
+    assert_eq!(switched.watch_count, Some(1));
+}
+
+#[test]
+fn update_missing_returns_log_not_found() {
+    let store = Store::open_in_memory().unwrap();
+    let log = WatchLog::now(FilmId::Imdb("tt0137523".into()), "Fight Club", Venue::Home);
+    let err = store.update(log).unwrap_err();
+    assert!(matches!(err, Error::LogNotFound { id: 0 }));
+}
+
+#[test]
+fn schema_newer_than_build_is_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("watch_log.db");
+
+    // Stamp a schema version this build does not understand.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA user_version = 2").unwrap();
+    }
+
+    let err = Store::open(&path).unwrap_err();
+    assert!(matches!(err, Error::SchemaTooNew { version: 2 }));
 }

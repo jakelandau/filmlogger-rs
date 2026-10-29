@@ -542,6 +542,9 @@ impl From<core::Error> for LoggerError {
             core::Error::LogNotFound { id } => LoggerError::LogNotFound { id },
             core::Error::SchemaTooNew { version } => LoggerError::SchemaTooNew { version },
             core::Error::NoCompiledApiKey => LoggerError::NoCompiledApiKey,
+            core::Error::MissingFormat { venue } => LoggerError::MissingFormat {
+                venue: venue.into(),
+            },
             core::Error::VenueFormatMismatch { venue, format } => LoggerError::VenueFormatMismatch {
                 venue: venue.into(),
                 format,

@@ -29,8 +29,6 @@ import uniffi.film_logger_ffi.Venue
 fun LogFields(
     venue: Venue,
     onVenue: (Venue) -> Unit,
-    attachFormat: Boolean,
-    onAttachFormat: (Boolean) -> Unit,
     format: Format?,
     onFormat: (Format) -> Unit,
     watchedAtInput: String,
@@ -53,20 +51,8 @@ fun LogFields(
     }
     Spacer(Modifier.height(8.dp))
 
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked = attachFormat,
-            onCheckedChange = {
-                onAttachFormat(it)
-                if (it && format == null) onFormat(FormatText.build(FormatParts.forVenue(venue)))
-            },
-        )
-        Text("Attach viewing format")
-    }
-    if (attachFormat) {
-        key(venue) {
-            FormatPicker(venue, format, onFormat)
-        }
+    key(venue) {
+        FormatPicker(venue, format, onFormat)
     }
     Spacer(Modifier.height(8.dp))
 

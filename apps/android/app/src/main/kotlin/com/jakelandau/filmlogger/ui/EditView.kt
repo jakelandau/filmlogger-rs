@@ -41,8 +41,7 @@ fun EditView(
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf(log.title) }
     var venue by remember { mutableStateOf(log.venue) }
-    var attachFormat by remember { mutableStateOf(log.format != null) }
-    var format by remember { mutableStateOf(log.format) }
+    var format by remember { mutableStateOf(log.format ?: FormatText.build(FormatParts.forVenue(log.venue))) }
     var watchedAtInput by remember { mutableStateOf(TimeUtils.toLocalInput(log.watchedAt)) }
     var notes by remember { mutableStateOf(log.notes ?: "") }
     var rating by remember { mutableStateOf(log.rating) }
@@ -56,7 +55,7 @@ fun EditView(
             try {
                 log.title = title
                 log.venue = venue
-                log.format = if (attachFormat) format else null
+                log.format = format
                 val parsed = TimeUtils.fromLocalInput(watchedAtInput)
                 log.watchedAt = if (parsed.isEmpty()) log.watchedAt else parsed
                 log.notes = notes.ifBlank { null }
@@ -104,11 +103,6 @@ fun EditView(
         LogFields(
             venue = venue,
             onVenue = { venue = it },
-            attachFormat = attachFormat,
-            onAttachFormat = {
-                attachFormat = it
-                if (it && format == null) format = FormatText.build(FormatParts.forVenue(venue))
-            },
             format = format,
             onFormat = { format = it },
             watchedAtInput = watchedAtInput,

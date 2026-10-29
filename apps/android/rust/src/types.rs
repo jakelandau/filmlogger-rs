@@ -378,6 +378,8 @@ pub enum LoggerError {
     SchemaTooNew { version: i64 },
     /// No TMDB API key was baked in at compile time.
     NoCompiledApiKey,
+    /// A viewing format is required on the log.
+    MissingFormat { venue: Venue },
     /// A viewing format was attached to a log whose venue it does not match.
     VenueFormatMismatch { venue: Venue, format: String },
     /// A theatre format's projection cannot be screened in its auditorium class.
@@ -406,6 +408,9 @@ impl std::fmt::Display for LoggerError {
                 write!(f, "database schema {version} is newer than this build")
             }
             Self::NoCompiledApiKey => write!(f, "no TMDB API key was compiled in"),
+            Self::MissingFormat { venue } => {
+                write!(f, "a viewing format is required for a {venue:?} log")
+            }
             Self::VenueFormatMismatch { format, .. } => {
                 write!(f, "viewing format {format} does not match the venue")
             }

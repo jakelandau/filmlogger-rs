@@ -73,8 +73,8 @@ fun posterUrl(path: String?): String? = path?.takeIf { it.isNotBlank() }?.let {
 }
 
 /**
- * The add flow: search TMDB (or find by IMDB id), pick a result, choose venue
- * and optional viewing format, and log the film.
+ * The add flow: search TMDB (or find by IMDB id), pick a result, choose
+ * venue and viewing format, and log the film.
  */
 @Composable
 fun AddView(
@@ -91,7 +91,6 @@ fun AddView(
 
     // detail form state (survives selection changes)
     var venue by remember { mutableStateOf(Venue.THEATRE) }
-    var attachFormat by remember { mutableStateOf(false) }
     var format by remember { mutableStateOf<Format?>(null) }
     var watchedAtInput by remember { mutableStateOf(TimeUtils.toLocalInput(Instant.now().toString())) }
     var rating by remember { mutableStateOf<Rating?>(null) }
@@ -132,7 +131,7 @@ fun AddView(
         busy = true
         scope.launch {
             try {
-                val f = if (attachFormat) format else null
+                val f = format ?: FormatText.build(FormatParts.forVenue(venue))
                 val log = logger.addFilm(s.id, venue, f)
                 log.watchedAt = TimeUtils.fromLocalInput(watchedAtInput).ifEmpty { log.watchedAt }
                 log.rating = rating
@@ -191,8 +190,6 @@ fun AddView(
                 film = s,
                 venue = venue,
                 onVenue = { venue = it },
-                attachFormat = attachFormat,
-                onAttachFormat = { attachFormat = it },
                 format = format,
                 onFormat = { format = it },
                 watchedAtInput = watchedAtInput,
@@ -280,8 +277,6 @@ private fun DetailCard(
     film: SelectedFilm,
     venue: Venue,
     onVenue: (Venue) -> Unit,
-    attachFormat: Boolean,
-    onAttachFormat: (Boolean) -> Unit,
     format: Format?,
     onFormat: (Format) -> Unit,
     watchedAtInput: String,
@@ -361,21 +356,9 @@ private fun DetailCard(
             }
             Spacer(Modifier.height(8.dp))
 
-            // format attach
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = attachFormat,
-                    onCheckedChange = {
-                        onAttachFormat(it)
-                        if (it && format == null) onFormat(FormatText.build(FormatParts.forVenue(venue)))
-                    },
-                )
-                Text("Attach viewing format")
-            }
-            if (attachFormat) {
-                key(venue) {
-                    FormatPicker(venue, format, onFormat)
-                }
+            // viewing format
+            key(venue) {
+                FormatPicker(venue, format, onFormat)
             }
             Spacer(Modifier.height(8.dp))
 

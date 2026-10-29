@@ -5,7 +5,7 @@
 import { el } from "../dom";
 import { api } from "../api";
 import { go, reload, showError } from "../app";
-import { formatControls } from "../format-ui";
+import { defaultFormat, formatControls } from "../format-ui";
 import type { FormatControls } from "../format-ui";
 import type { Format, Movie, MovieSummary, Venue } from "../types";
 
@@ -23,7 +23,6 @@ interface AddState {
   total_pages: number;
   selected: Selected | null;
   venue: Venue;
-  attachFormat: boolean;
   format: Format | null;
 }
 
@@ -33,7 +32,6 @@ const add: AddState = {
   total_pages: 0,
   selected: null,
   venue: "theatre",
-  attachFormat: false,
   format: null,
 };
 
@@ -41,7 +39,7 @@ let controls: FormatControls | null = null;
 
 // Preserve the live format selection across a re-render.
 function captureFormat(): void {
-  if (controls && add.attachFormat) add.format = controls.get();
+  if (controls) add.format = controls.get();
 }
 
 export function renderAdd(content: HTMLElement): void {
@@ -96,23 +94,21 @@ function renderResults(): HTMLElement {
 
 function renderSelected(): HTMLElement {
   const s = add.selected as Selected;
-  const attach = el("input", {
-    type: "checkbox",
-    checked: add.attachFormat,
-    onchange: () => { captureFormat(); add.attachFormat = !add.attachFormat; renderAgain(); },
-  });
 
   const venueTheatre = el("input", { type: "radio", name: "venue", value: "theatre", checked: add.venue === "theatre" });
   const venueHome = el("input", { type: "radio", name: "venue", value: "home", checked: add.venue === "home" });
-  const setVenue = (v: Venue) => { captureFormat(); add.venue = v; renderAgain(); };
+  const setVenue = (v: Venue) => {
+    captureFormat();
+    add.venue = v;
+    if (!add.format || !venueMatches(add.venue)) add.format = defaultFormat(v);
+    renderAgain();
+  };
   venueTheatre.addEventListener("change", () => setVenue("theatre"));
   venueHome.addEventListener("change", () => setVenue("home"));
 
-  let formatArea: HTMLElement | null = null;
-  if (add.attachFormat) {
-    controls = formatControls(add.venue, add.format && venueMatches(add.venue) ? add.format : null);
-    formatArea = el("div", { class: "format-area" }, controls.root);
-  }
+  if (!add.format || !venueMatches(add.venue)) add.format = defaultFormat(add.venue);
+  controls = formatControls(add.venue, add.format);
+  const formatArea = el("div", { class: "format-area" }, controls.root);
 
   const addBtn = el("button", { class: "btn primary", onclick: () => doAdd() }, "Log this film");
 
@@ -126,9 +122,9 @@ function renderSelected(): HTMLElement {
       el("label", {}, venueTheatre, " Theatre"),
       el("label", {}, venueHome, " Home")
     ),
-    el("label", { class: "attach" }, attach, " Attach viewing format"),
+    el("div", { class: "field-row" }, el("label", {}, "Viewing format")),
     formatArea,
-    el("div", { class: "actions" }, addBtn, el("button", { class: "btn", onclick: () => { add.selected = null; renderAgain(); } }, "Back"))
+    el("div", { class: "actions" }, addBtn, el("button", { class: "btn", onclick: () => { add.selected = null; add.format = null; controls = null; renderAgain(); } }, "Back"))
   );
 }
 
@@ -137,6 +133,7 @@ function venueMatches(venue: Venue): boolean {
 }
 
 function renderAgain(): void {
+  captureFormat();
   const content = document.querySelector<HTMLElement>(".content");
   if (content) { content.replaceChildren(); renderAdd(content); }
 }
@@ -161,12 +158,12 @@ function select(r: { id: number; title: string; release_date: string | null }): 
 
 async function doAdd(): Promise<void> {
   const s = add.selected as Selected;
-  const format = add.attachFormat && controls ? controls.get() : null;
+  captureFormat();
+  const format = add.format;
   try {
     await api.addFilm(s.id, add.venue, format);
     add.selected = null;
     add.results = [];
-    add.attachFormat = false;
     add.format = null;
     controls = null;
     await reload();

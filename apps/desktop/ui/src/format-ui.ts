@@ -64,6 +64,23 @@ export interface FormatControls {
   get: () => Format;
 }
 
+// A venue-appropriate default format, used when a log is created without
+// one (a viewing format is required on every log).
+export function defaultFormat(venue: Venue): Format {
+  if (venue === "home") {
+    return { home: { medium: "bluray" } };
+  }
+  return {
+    theatre: {
+      projection: { dci: "2k_lamp" },
+      screen: "regular",
+      three_d: false,
+      hfr: false,
+      dbox: false,
+    },
+  };
+}
+
 // Build the format controls for `venue`, seeded from `initial` (when its
 // venue matches). `get()` reads the live selection.
 export function formatControls(venue: Venue, initial: Format | null): FormatControls {
@@ -108,6 +125,51 @@ function parseLeaf(l: Leaf): { value: string; custom: string } {
   return { value: "custom", custom: l.custom };
 }
 
+// The technology options for a projection family.
+function techOptions(family: string): Options {
+  return family === "imax" ? IMAX : family === "film" ? FILM : DCI;
+}
+
+// The auditorium options legal for a projection family, mirroring the Rust
+// `Projection::runs_on`: IMAX runs only in IMAX auditoria, film only in
+// regular ones, DCI in everything except IMAX.
+function screensForFamily(family: string): Options {
+  if (family === "imax") {
+    return SCREENS.filter(([v]) => v === "imax_class" || v === "imax_retrofit");
+  }
+  if (family === "film") {
+    return SCREENS.filter(([v]) => v === "regular");
+  }
+  return SCREENS.filter(([v]) => v !== "imax_class" && v !== "imax_retrofit");
+}
+
+// Mirrors the Rust `Projection::allows` and `ScreenClass::allows` tables:
+// whether the given flag may be on for this projection × screen.
+function flagAllowed(flag: string, family: string, tech: string, screen: string): boolean {
+  let projectionAllows: boolean;
+  if (family === "dci") projectionAllows = true;
+  else if (family === "film") projectionAllows = flag === "3d";
+  else projectionAllows = tech === "70mm" ? false : flag !== "dbox";
+  if (!projectionAllows) return false;
+  if (screen === "screenx") return false;
+  if (
+    screen === "vip" ||
+    screen === "4dx" ||
+    screen === "ultra_4dx" ||
+    screen === "imax_class" ||
+    screen === "imax_retrofit"
+  ) {
+    return flag !== "dbox";
+  }
+  return true;
+}
+
+// Mirrors the Rust `ScreenClass::forces`: 4DX and Ultra 4DX auditoria are
+// 3D by definition.
+function screenForcesFlag(screen: string, flag: string): boolean {
+  return flag === "3d" && (screen === "4dx" || screen === "ultra_4dx");
+}
+
 function parseProjection(p: Projection): {
   family: string;
   tech: string;
@@ -136,45 +198,94 @@ function projectionFrom(family: string, tech: Leaf): Projection {
   }
 }
 
+// The theatre cascade, with the Rust legality tables mirrored: the screen
+// options are restricted to the projection family, and the presentation-flag
+// checkboxes are restricted to what the selected technology and screen
+// allow (forced flags are checked and disabled). The flag state is the
+// source of truth, surviving each rebuild of the checkboxes.
 function buildTheatre(initial: Format | null): { root: HTMLElement; get: () => Format } {
   const t = initial && "theatre" in initial ? initial.theatre : null;
   const proj = t ? parseProjection(t.projection) : null;
+  const initialScreen = t ? parseLeaf(t.screen) : null;
+  const family = proj?.family ?? "dci";
+
+  const flags = {
+    three_d: t?.three_d ?? false,
+    hfr: t?.hfr ?? false,
+    dbox: t?.dbox ?? false,
+  };
 
   const familySel = el("select", {}, ...FAMILIES.map(([v, l]) => el("option", { value: v }, l)));
-  const tech = leafSelect(DCI, proj?.tech ?? "2k_lamp", proj?.techCustom ?? "");
-  const screen = leafSelect(SCREENS, proj ? "regular" : "regular", "");
-  // Restore screen from initial.
-  if (t) {
-    const s = parseLeaf(t.screen);
-    screen.select.value = SCREENS.some(([v]) => v === s.value) ? s.value : "custom";
-    screen.input.value = s.custom;
-    screen.select.dispatchEvent(new Event("change"));
-  }
-
-  const threeD = el("input", { type: "checkbox", checked: t?.three_d ?? false });
-  const hfr = el("input", { type: "checkbox", checked: t?.hfr ?? false });
-  const dbox = el("input", { type: "checkbox", checked: t?.dbox ?? false });
-
-  // Cascade: family → technology options.
-  const setFamily = () => {
-    const opts =
-      familySel.value === "imax" ? IMAX : familySel.value === "film" ? FILM : DCI;
-    clear(tech.select);
-    for (const [v, l] of opts) tech.select.append(el("option", { value: v }, l));
-    tech.select.value = "custom";
-    tech.select.dispatchEvent(new Event("change"));
-  };
-  familySel.addEventListener("change", setFamily);
-  if (proj) {
-    familySel.value = proj.family;
-    setFamily();
-    tech.select.value = proj.tech;
-    tech.input.value = proj.techCustom;
-    tech.select.dispatchEvent(new Event("change"));
-  }
+  familySel.value = family;
+  const tech = leafSelect(
+    techOptions(family),
+    proj?.tech ?? "2k_lamp",
+    proj?.techCustom ?? "",
+  );
+  const screen = leafSelect(
+    screensForFamily(family),
+    initialScreen?.value ?? "regular",
+    initialScreen?.custom ?? "",
+  );
 
   const row = (label: string, ...controls: HTMLElement[]) =>
     el("div", { class: "field-row" }, el("label", {}, label), ...controls);
+
+  const FLAG_DEFS = [
+    ["3d", "three_d", "3D"],
+    ["hfr", "hfr", "HFR"],
+    ["dbox", "dbox", "D-BOX"],
+  ] as const;
+  const flagHolder = el("div", { class: "flag-row" });
+
+  // Rebuild the flag checkboxes for the current family/technology/screen:
+  // legal flags only, forced flags checked and disabled.
+  function renderFlags(): void {
+    const f = familySel.value;
+    const techValue = tech.select.value;
+    const screenValue = screen.select.value;
+    clear(flagHolder);
+    let any = false;
+    for (const [key, prop, label] of FLAG_DEFS) {
+      if (!flagAllowed(key, f, techValue, screenValue)) {
+        flags[prop] = false;
+        continue;
+      }
+      any = true;
+      const forced = screenForcesFlag(screenValue, key);
+      const cb = el("input", { type: "checkbox", checked: forced ? true : flags[prop] });
+      if (forced) cb.disabled = true;
+      cb.addEventListener("change", () => {
+        flags[prop] = cb.checked;
+      });
+      flagHolder.append(el("label", { class: "flag" }, cb, " " + label));
+    }
+    if (!any) flagHolder.append(el("span", { class: "dim" }, "no presentation options"));
+  }
+
+  // Cascade: family → technology and screen options, then the flags.
+  function setFamily(): void {
+    const f = familySel.value;
+    const opts = techOptions(f);
+    clear(tech.select);
+    for (const [v, l] of opts) tech.select.append(el("option", { value: v }, l));
+    tech.select.value = opts[0][0];
+    tech.select.dispatchEvent(new Event("change"));
+
+    const screenOpts = screensForFamily(f);
+    clear(screen.select);
+    for (const [v, l] of screenOpts) screen.select.append(el("option", { value: v }, l));
+    if (!screenOpts.some(([v]) => v === screen.select.value)) {
+      screen.select.value = screenOpts[0][0];
+    }
+    screen.select.dispatchEvent(new Event("change"));
+    renderFlags();
+  }
+
+  familySel.addEventListener("change", setFamily);
+  tech.select.addEventListener("change", renderFlags);
+  screen.select.addEventListener("change", renderFlags);
+  renderFlags();
 
   const root = el(
     "div",
@@ -182,22 +293,16 @@ function buildTheatre(initial: Format | null): { root: HTMLElement; get: () => F
     row("Projection family", familySel),
     row("Technology", tech.select, tech.input),
     row("Auditorium", screen.select, screen.input),
-    el(
-      "div",
-      { class: "flag-row" },
-      el("label", { class: "flag" }, threeD, " 3D"),
-      el("label", { class: "flag" }, hfr, " HFR"),
-      el("label", { class: "flag" }, dbox, " D-BOX"),
-    ),
+    row("Presentation", flagHolder),
   );
 
   const get = (): Format => ({
     theatre: {
       projection: projectionFrom(familySel.value, tech.leaf()),
       screen: screen.leaf(),
-      three_d: threeD.checked,
-      hfr: hfr.checked,
-      dbox: dbox.checked,
+      three_d: flags.three_d,
+      hfr: flags.hfr,
+      dbox: flags.dbox,
     },
   });
 

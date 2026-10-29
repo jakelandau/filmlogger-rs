@@ -4,7 +4,7 @@
 import { el } from "../dom";
 import { api } from "../api";
 import { getState, go, reload, showError } from "../app";
-import { formatControls } from "../format-ui";
+import { defaultFormat, formatControls } from "../format-ui";
 import type { FormatControls } from "../format-ui";
 import { fromLocalInput, toLocalInput } from "../time";
 import type { Format, Rating, Venue, WatchLog } from "../types";
@@ -18,7 +18,6 @@ interface EditState {
   rewatch: boolean;
   watchCountText: string;
   venue: Venue;
-  attach: boolean;
   format: Format | null;
 }
 
@@ -31,7 +30,6 @@ const edit: EditState = {
   rewatch: false,
   watchCountText: "",
   venue: "theatre",
-  attach: false,
   format: null,
 };
 
@@ -54,7 +52,7 @@ function capture(): void {
     edit.rewatch = refs.rewatch.checked;
     edit.watchCountText = refs.watchCount.value;
   }
-  if (controls && edit.attach) edit.format = controls.get();
+  if (controls) edit.format = controls.get();
 }
 
 function renderAgain(): void {
@@ -82,8 +80,7 @@ export function renderEdit(content: HTMLElement): void {
     edit.rewatch = log.rewatch;
     edit.watchCountText = log.watch_count != null ? String(log.watch_count) : "";
     edit.venue = log.venue;
-    edit.attach = log.format != null;
-    edit.format = log.format;
+    edit.format = log.format ?? defaultFormat(log.venue);
   }
 
   const title = el("input", { class: "text", value: edit.title });
@@ -101,19 +98,20 @@ export function renderEdit(content: HTMLElement): void {
 
   const venueTheatre = el("input", { type: "radio", name: "venue", checked: edit.venue === "theatre" });
   const venueHome = el("input", { type: "radio", name: "venue", checked: edit.venue === "home" });
-  venueTheatre.addEventListener("change", () => { edit.venue = "theatre"; renderAgain(); });
-  venueHome.addEventListener("change", () => { edit.venue = "home"; renderAgain(); });
+  const setVenue = (v: Venue) => {
+    capture();
+    edit.venue = v;
+    if (!venueMatches(v)) {
+      controls = null;
+      edit.format = defaultFormat(v);
+    }
+    renderAgain();
+  };
+  venueTheatre.addEventListener("change", () => setVenue("theatre"));
+  venueHome.addEventListener("change", () => setVenue("home"));
 
-  const attach = el("input", { type: "checkbox", checked: edit.attach });
-  attach.addEventListener("change", () => { edit.attach = attach.checked; renderAgain(); });
-
-  if (edit.attach) {
-    controls = formatControls(edit.venue, edit.format && venueMatches(edit.venue) ? edit.format : null);
-  } else {
-    controls = null;
-  }
-
-  const formatArea = edit.attach ? el("div", { class: "format-area" }, controls?.root) : null;
+  controls = formatControls(edit.venue, edit.format);
+  const formatArea = el("div", { class: "format-area" }, controls.root);
 
   content.append(
     el("form", { class: "edit-form", onsubmit: (e: Event) => { e.preventDefault(); save(); } },
@@ -124,7 +122,7 @@ export function renderEdit(content: HTMLElement): void {
       el("div", { class: "field-row" }, el("label", {}, "Watch count"), watchCount),
       el("div", { class: "field-row" }, el("label", {}, "Rewatch"), rewatch),
       el("div", { class: "venue-row" }, el("label", {}, venueTheatre, " Theatre"), el("label", {}, venueHome, " Home")),
-      el("label", { class: "attach" }, attach, " Attach viewing format"),
+      el("div", { class: "field-row" }, el("label", {}, "Viewing format")),
       formatArea,
       el("div", { class: "actions" },
         el("button", { class: "btn primary", type: "submit" }, "Save"),
@@ -152,7 +150,7 @@ async function save(): Promise<void> {
     rewatch: edit.rewatch,
     watch_count: edit.watchCountText.trim() === "" ? null : Number(edit.watchCountText),
     venue: edit.venue,
-    format: edit.attach ? edit.format : null,
+    format: edit.format,
   };
   try {
     await api.updateLog(updated);

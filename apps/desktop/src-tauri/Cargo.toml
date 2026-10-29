@@ -11,6 +11,11 @@ repository.workspace = true
 name = "film_logger_desktop"
 path = "src/lib.rs"
 
+[features]
+# Production builds: embed the built UI and serve it over a custom
+# protocol instead of loading the Vite dev server.
+custom-protocol = ["tauri/custom-protocol"]
+
 [dependencies]
 film-logger = { path = "../../../crates/film-logger" }
 tauri = { version = "2", features = [] }

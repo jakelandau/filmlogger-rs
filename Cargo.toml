@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/film-logger"]
+members = ["crates/film-logger", "apps/desktop/src-tauri", "apps/android/rust"]
 
 [workspace.package]
 edition = "2024"

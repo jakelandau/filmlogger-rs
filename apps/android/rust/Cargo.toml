@@ -1,0 +1,24 @@
+[package]
+name = "film-logger-ffi"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "film_logger_ffi"
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+chrono = { workspace = true }
+film-logger = { path = "../../../crates/film-logger" }
+uniffi = { version = "0.32" }
+
+[dev-dependencies]
+# Enables the `uniffi-bindgen` CLI (via `uniffi::uniffi_bindgen_main`) for the
+# `bindgen` example; kept to dev so the shipped cdylib stays lean.
+uniffi = { version = "0.32", features = ["cli"] }
+
+[lints]
+workspace = true

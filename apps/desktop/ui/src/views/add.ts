@@ -57,6 +57,9 @@ function renderSearch(): HTMLElement {
     type: "text",
     placeholder: "Search films…",
     value: add.query,
+    oninput: (e: Event) => {
+      add.query = (e.currentTarget as HTMLInputElement).value;
+    },
   });
   const btn = el("button", { class: "btn" }, "Search");
   const form = el(

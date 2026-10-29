@@ -7,6 +7,7 @@
 //! ```
 
 use film_logger::{FilmLogger, RatingBoard, TmdbClient, Venue, WatchLog};
+use film_logger::domain::{Dci, Format, HomeMedium, Projection, ScreenClass};
 use serde_json::{Value, from_str};
 use tokio::runtime::Builder;
 use wiremock::matchers::path;
@@ -69,8 +70,28 @@ fn main() {
         FilmLogger::open_with(&db, TmdbClient::with_base_url("test-key", server.uri())).unwrap();
 
     // Two viewings of the same film: the second is a rewatch.
-    let first = logger.add_film(550, Venue::Theatre, None).unwrap();
-    let second = logger.add_film(550, Venue::Home, None).unwrap();
+    let first = logger
+        .add_film(
+            550,
+            Venue::Theatre,
+            Some(Format::Theatre {
+                projection: Projection::Dci(Dci::Laser4K),
+                screen: ScreenClass::Plf,
+                three_d: false,
+                hfr: false,
+                dbox: false,
+            }),
+        )
+        .unwrap();
+    let second = logger
+        .add_film(
+            550,
+            Venue::Home,
+            Some(Format::Home {
+                medium: HomeMedium::BluRay,
+            }),
+        )
+        .unwrap();
     assert_eq!(first.watch_count, Some(1));
     assert!(!first.rewatch);
     assert!(second.rewatch);
@@ -81,7 +102,10 @@ fn main() {
     );
 
     // A home viewing of a different film, added without TMDB.
-    let home = WatchLog::now(film_logger::FilmId::Tmdb(999), "A Home Film", Venue::Home);
+    let mut home = WatchLog::now(film_logger::FilmId::Tmdb(999), "A Home Film", Venue::Home);
+    home.format = Some(Format::Home {
+        medium: HomeMedium::BluRay,
+    });
     logger.store().insert(home).unwrap();
     println!("added: A Home Film (direct)");
 

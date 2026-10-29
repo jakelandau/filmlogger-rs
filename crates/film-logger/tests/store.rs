@@ -2,6 +2,28 @@
 //! persistence across store instances.
 
 use film_logger::{Error, FilmId, RatingBoard, Store, Venue, WatchLog};
+use film_logger::domain::{Dci, Format, HomeMedium, Projection, ScreenClass};
+
+/// A valid log for tests: a [`WatchLog::now`] with a format attached,
+/// matching the venue.
+fn test_log(film_id: FilmId, title: &str, venue: Venue) -> WatchLog {
+    let mut log = WatchLog::now(film_id, title, venue);
+    let format = if venue == Venue::Home {
+        Format::Home {
+            medium: HomeMedium::BluRay,
+        }
+    } else {
+        Format::Theatre {
+            projection: Projection::Dci(Dci::Laser4K),
+            screen: ScreenClass::Plf,
+            three_d: false,
+            hfr: false,
+            dbox: false,
+        }
+    };
+    log.format = Some(format);
+    log
+}
 
 #[test]
 fn data_persists_across_reopen() {
@@ -11,7 +33,7 @@ fn data_persists_across_reopen() {
     // Insert through one store instance, then drop it.
     {
         let store = Store::open(&path).unwrap();
-        let log = WatchLog::now(
+        let log = test_log(
             FilmId::Imdb("tt0137523".into()),
             "Fight Club",
             Venue::Theatre,
@@ -30,7 +52,7 @@ fn data_persists_across_reopen() {
     assert_eq!(fetched.notes.as_deref(), Some("great movie"));
 
     // A second log lists before the first (most recently watched first).
-    let second = WatchLog::now(FilmId::Tmdb(551), "Second Film", Venue::Home);
+    let second = test_log(FilmId::Tmdb(551), "Second Film", Venue::Home);
     let stored_second = store.insert(second).unwrap();
     let listed = store.list().unwrap();
     assert_eq!(listed.len(), 2);
@@ -45,7 +67,7 @@ fn rewatch_and_watch_count_derived_from_prior_appearances() {
 
     // First viewing of the film: not a rewatch, watch count 1.
     let first = store
-        .insert(WatchLog::now(
+        .insert(test_log(
             FilmId::Imdb("tt0137523".into()),
             "Fight Club",
             Venue::Theatre,
@@ -56,7 +78,7 @@ fn rewatch_and_watch_count_derived_from_prior_appearances() {
 
     // Second viewing of the same film: a rewatch, watch count 2.
     let second = store
-        .insert(WatchLog::now(
+        .insert(test_log(
             FilmId::Imdb("tt0137523".into()),
             "Fight Club",
             Venue::Theatre,
@@ -67,11 +89,7 @@ fn rewatch_and_watch_count_derived_from_prior_appearances() {
 
     // A different film is counted independently.
     let other = store
-        .insert(WatchLog::now(
-            FilmId::Imdb("tt0000001".into()),
-            "Other",
-            Venue::Home,
-        ))
+        .insert(test_log(FilmId::Imdb("tt0000001".into()), "Other", Venue::Home))
         .unwrap();
     assert!(!other.rewatch);
     assert_eq!(other.watch_count, Some(1));
@@ -101,7 +119,7 @@ fn update_recomputes_rewatch_and_watch_count() {
     let store = Store::open(&path).unwrap();
 
     let first = store
-        .insert(WatchLog::now(
+        .insert(test_log(
             FilmId::Imdb("tt0137523".into()),
             "Fight Club",
             Venue::Theatre,
@@ -111,7 +129,7 @@ fn update_recomputes_rewatch_and_watch_count() {
 
     // A second viewing of the same film.
     let second = store
-        .insert(WatchLog::now(
+        .insert(test_log(
             FilmId::Imdb("tt0137523".into()),
             "Fight Club",
             Venue::Theatre,
@@ -140,7 +158,7 @@ fn update_recomputes_rewatch_and_watch_count() {
 #[test]
 fn update_missing_returns_log_not_found() {
     let store = Store::open_in_memory().unwrap();
-    let log = WatchLog::now(FilmId::Imdb("tt0137523".into()), "Fight Club", Venue::Home);
+    let log = test_log(FilmId::Imdb("tt0137523".into()), "Fight Club", Venue::Home);
     let err = store.update(log).unwrap_err();
     assert!(matches!(err, Error::LogNotFound { id: 0 }));
 }

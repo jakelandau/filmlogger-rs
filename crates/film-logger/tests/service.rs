@@ -2,7 +2,8 @@
 //! mock TMDB: add a film, export the database, and verify the exported copy
 //! reopens with full data and settings parity.
 
-use film_logger::{FilmLogger, RatingBoard, TmdbClient, Venue};
+use film_logger::{FilmLogger, RatingBoard, TmdbClient, Venue, WatchLog};
+use film_logger::domain::{Dci, FilmId, Format, HomeMedium, Projection, ScreenClass};
 use serde_json::{Value, from_str};
 use tokio::runtime::Builder;
 use wiremock::matchers::path;
@@ -42,6 +43,29 @@ fn value(json: &str) -> Value {
     from_str(json).unwrap()
 }
 
+fn theatre_format() -> Format {
+    Format::Theatre {
+        projection: Projection::Dci(Dci::Laser4K),
+        screen: ScreenClass::Plf,
+        three_d: false,
+        hfr: false,
+        dbox: false,
+    }
+}
+
+fn test_log(film_id: FilmId, title: &str, venue: Venue) -> WatchLog {
+    let mut log = WatchLog::now(film_id, title, venue);
+    let format = if venue == Venue::Home {
+        Format::Home {
+            medium: HomeMedium::BluRay,
+        }
+    } else {
+        theatre_format()
+    };
+    log.format = Some(format);
+    log
+}
+
 /// Start a wiremock server answering the movie-details and release-dates
 /// endpoints for TMDB id 550. The async setup is driven on a throwaway
 /// single-threaded tokio runtime; the server then runs on its own thread.
@@ -76,7 +100,7 @@ fn add_export_reopen_parity() {
         FilmLogger::open_with(&db, TmdbClient::with_base_url("test-key", server.uri())).unwrap();
 
     // Add a film: enriched from TMDB, with certifications.
-    let log = logger.add_film(550, Venue::Theatre, None).unwrap();
+    let log = logger.add_film(550, Venue::Theatre, Some(theatre_format())).unwrap();
     assert_eq!(log.title, "Fight Club");
     let certifications = log.certifications.as_ref().unwrap();
     assert_eq!(certifications.us.as_deref(), Some("R"));
@@ -118,7 +142,7 @@ fn import_from_replaces_contents() {
         TmdbClient::with_base_url("test-key", server.uri()),
     )
     .unwrap();
-    source.add_film(550, Venue::Theatre, None).unwrap();
+    source.add_film(550, Venue::Theatre, Some(theatre_format())).unwrap();
     source.export_to(&source_export).unwrap();
 
     let mut target = FilmLogger::open_with(
@@ -126,8 +150,7 @@ fn import_from_replaces_contents() {
         TmdbClient::with_base_url("test-key", server.uri()),
     )
     .unwrap();
-    let home =
-        film_logger::WatchLog::now(film_logger::FilmId::Tmdb(999), "A Home Film", Venue::Home);
+    let home = test_log(film_logger::FilmId::Tmdb(999), "A Home Film", Venue::Home);
     target.store().insert(home).unwrap();
 
     // Import: the target's contents become the source's, including settings.

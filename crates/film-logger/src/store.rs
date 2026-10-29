@@ -372,13 +372,34 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{FilmViewings, Store, VenueCounts};
-    use crate::domain::{FilmId, Venue, WatchLog};
+    use crate::domain::{Dci, FilmId, Format, HomeMedium, Projection, ScreenClass, Venue, WatchLog};
     use chrono::NaiveDate;
+
+    /// A valid log for tests: a [`WatchLog::now`] with a format attached,
+    /// matching the venue.
+    fn test_log(film_id: FilmId, title: &str, venue: Venue) -> WatchLog {
+        let mut log = WatchLog::now(film_id, title, venue);
+        let format = if venue == Venue::Home {
+            Format::Home {
+                medium: HomeMedium::BluRay,
+            }
+        } else {
+            Format::Theatre {
+                projection: Projection::Dci(Dci::Laser4K),
+                screen: ScreenClass::Plf,
+                three_d: false,
+                hfr: false,
+                dbox: false,
+            }
+        };
+        log.format = Some(format);
+        log
+    }
 
     #[test]
     fn insert_and_get_roundtrip() {
         let store = Store::open_in_memory().unwrap();
-        let log = WatchLog::now(
+        let log = test_log(
             FilmId::Imdb("tt0137523".into()),
             "Fight Club",
             Venue::Theatre,
@@ -392,8 +413,8 @@ mod tests {
     #[test]
     fn list_orders_most_recent_first() {
         let store = Store::open_in_memory().unwrap();
-        let a = WatchLog::now(FilmId::Imdb("tt0000001".into()), "First", Venue::Home);
-        let b = WatchLog::now(FilmId::Imdb("tt0000002".into()), "Second", Venue::Home);
+        let a = test_log(FilmId::Imdb("tt0000001".into()), "First", Venue::Home);
+        let b = test_log(FilmId::Imdb("tt0000002".into()), "Second", Venue::Home);
         let a = store.insert(a).unwrap();
         let b = store.insert(b).unwrap();
         let listed = store.list().unwrap();
@@ -407,11 +428,7 @@ mod tests {
     #[test]
     fn delete_removes_row() {
         let store = Store::open_in_memory().unwrap();
-        let log = WatchLog::now(
-            FilmId::Imdb("tt0137523".into()),
-            "Fight Club",
-            Venue::Theatre,
-        );
+        let log = test_log(FilmId::Imdb("tt0137523".into()), "Fight Club", Venue::Theatre);
         let stored = store.insert(log).unwrap();
         assert!(store.delete(stored.id).unwrap());
         assert!(!store.delete(stored.id).unwrap());
@@ -446,11 +463,11 @@ mod tests {
                 .and_utc();
             store.insert(log).unwrap();
         };
-        insert(WatchLog::now(a.clone(), "Film A", Venue::Theatre), 2020);
-        insert(WatchLog::now(a.clone(), "Film A", Venue::Theatre), 2021);
-        insert(WatchLog::now(a.clone(), "Film A", Venue::Home), 2021);
-        insert(WatchLog::now(b.clone(), "Film B", Venue::Home), 2021);
-        insert(WatchLog::now(b.clone(), "Film B", Venue::Home), 2022);
+        insert(test_log(a.clone(), "Film A", Venue::Theatre), 2020);
+        insert(test_log(a.clone(), "Film A", Venue::Theatre), 2021);
+        insert(test_log(a.clone(), "Film A", Venue::Home), 2021);
+        insert(test_log(b.clone(), "Film B", Venue::Home), 2021);
+        insert(test_log(b.clone(), "Film B", Venue::Home), 2022);
 
         let stats = store.stats().unwrap();
         assert_eq!(stats.total_viewings, 5);

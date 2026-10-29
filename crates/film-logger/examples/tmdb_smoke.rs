@@ -8,6 +8,7 @@
 //! ```
 
 use film_logger::{Store, TmdbClient, Venue, WatchLog};
+use film_logger::domain::{Format, HomeMedium};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = TmdbClient::from_compiled_key().expect(
@@ -39,7 +40,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Record the viewing and persist it to a local SQLite file.
-    let log = WatchLog::from_movie_now(&movie, Venue::Home);
+    let log = WatchLog::from_movie_with_format_now(
+        &movie,
+        Venue::Home,
+        Format::Home {
+            medium: HomeMedium::BluRay,
+        },
+    )?;
     let store = Store::open("tmdb_smoke.db")?;
     let stored = store.insert(log)?;
     println!("stored log id {} for {}", stored.id, stored.title);

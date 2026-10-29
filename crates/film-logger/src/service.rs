@@ -81,12 +81,14 @@ impl FilmLogger {
     /// Log a viewing of a film found by TMDB id, enriching the log from the
     /// film's details and board certifications.
     ///
-    /// `format`, if any, must match `venue`; it is validated.
+    /// `format` must match `venue`; it is validated. A log without a format
+    /// fails validation ([`Error::MissingFormat`]).
     ///
     /// # Errors
     ///
-    /// TMDB or store errors; [`Error::VenueFormatMismatch`] or a format
-    /// validation error if `format` is inconsistent.
+    /// TMDB or store errors; [`Error::MissingFormat`] if no `format` is
+    /// given, [`Error::VenueFormatMismatch`] or a format validation error if
+    /// `format` is inconsistent.
     pub fn add_film(
         &self,
         tmdb_id: i64,

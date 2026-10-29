@@ -509,7 +509,7 @@ pub struct WatchLog {
     /// `None` until the store counts prior appearances on insert.
     #[serde(default)]
     pub watch_count: Option<i32>,
-    /// How it was viewed, if known.
+    /// How it was viewed. Required on validation: see [`Self::validate`].
     pub format: Option<Format>,
 }
 
@@ -694,12 +694,20 @@ impl WatchLog {
     /// Validate the log's invariants.
     ///
     /// Checks that [`Self::watch_count`], if present, is at least one, and
-    /// that [`Self::format`], if present, is internally consistent.
+    /// that [`Self::format`] is present, matches the venue, and is internally
+    /// consistent.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::InvalidWatchCount`] if `watch_count` is below one, or a
-    /// format validation error if the format is internally inconsistent.
+    /// Returns [`Error::InvalidWatchCount`] if `watch_count` is below one,
+    /// [`Error::MissingFormat`] if no format is attached,
+    /// [`Error::VenueFormatMismatch`] if the format does not match the venue,
+    /// or a format validation error if the format is internally inconsistent.
+    ///
+    /// # Panics
+    ///
+    /// Panics if [`Self::format`] cannot be serialized to JSON, which should
+    /// not occur for a valid format.
     #[must_use = "a watch log must be validated before persistence"]
     pub fn validate(&self) -> Result<(), Error> {
         if let Some(n) = self.watch_count {
@@ -707,10 +715,16 @@ impl WatchLog {
                 return Err(Error::InvalidWatchCount { count: n });
             }
         }
-        if let Some(format) = &self.format {
-            format.validate()?;
+        let Some(format) = &self.format else {
+            return Err(Error::MissingFormat { venue: self.venue });
+        };
+        if format.venue() != self.venue {
+            return Err(Error::VenueFormatMismatch {
+                venue: self.venue,
+                format: serde_json::to_string(format).unwrap(),
+            });
         }
-        Ok(())
+        format.validate()
     }
 }
 
@@ -863,7 +877,7 @@ mod tests {
         );
         assert!(matches!(res, Err(Error::VenueFormatMismatch { .. })));
 
-        let ok = WatchLog::with_format_now(
+        let mut ok = WatchLog::with_format_now(
             FilmId::Imdb("tt0137523".into()),
             "Fight Club",
             Venue::Theatre,
@@ -874,8 +888,31 @@ mod tests {
                 hfr: false,
                 dbox: false,
             },
+        )
+        .unwrap();
+
+        // A format swapped to a different venue after construction fails
+        // validation too.
+        ok.format = Some(Format::Home {
+            medium: HomeMedium::BluRay,
+        });
+        assert!(matches!(
+            ok.validate(),
+            Err(Error::VenueFormatMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_requires_format() {
+        let log = WatchLog::now(
+            FilmId::Imdb("tt0137523".into()),
+            "Fight Club",
+            Venue::Theatre,
         );
-        assert!(ok.is_ok());
+        assert!(matches!(
+            log.validate(),
+            Err(Error::MissingFormat { .. })
+        ));
     }
 
     #[test]
@@ -1110,6 +1147,13 @@ mod tests {
             "Fight Club",
             Venue::Theatre,
         );
+        log.format = Some(Format::Theatre {
+            projection: Projection::Dci(Dci::Laser4K),
+            screen: ScreenClass::Plf,
+            three_d: false,
+            hfr: false,
+            dbox: false,
+        });
         assert!(log.validate().is_ok());
         log.watch_count = Some(0);
         assert!(matches!(

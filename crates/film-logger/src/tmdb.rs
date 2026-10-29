@@ -471,7 +471,7 @@ impl From<tmdb_client::models::Genre> for Genre {
 
 #[cfg(test)]
 mod tests {
-    use super::{Certifications, Movie, MovieDetails, MovieObject, MovieSummary};
+    use super::{Movie, MovieDetails, MovieObject, MovieSummary};
 
     fn test_movie() -> Movie {
         Movie {

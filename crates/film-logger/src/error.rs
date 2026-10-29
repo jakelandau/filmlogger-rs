@@ -53,6 +53,13 @@ pub enum Error {
     #[error("no TMDB API key was compiled in")]
     NoCompiledApiKey,
 
+    /// The required viewing format is missing from the log.
+    #[error("a viewing format is required")]
+    MissingFormat {
+        /// The venue of the log.
+        venue: Venue,
+    },
+
     /// A viewing format was attached to a log whose venue it does not match.
     #[error("viewing format does not match venue")]
     VenueFormatMismatch {

@@ -152,6 +152,10 @@ fn find_imdb(state: tauri::State<AppState>, imdb_id: String) -> Result<Movie, St
 /// the database cannot be opened, or the Tauri runtime fails to start.
 pub fn run() {
     tauri::Builder::default()
+        // The app is always dark, including the window chrome.
+        .on_page_load(|webview, _| {
+            let _ = webview.window().set_theme(Some(tauri::Theme::Dark));
+        })
         .setup(|app| {
             let dir = app.path().app_config_dir()?;
             std::fs::create_dir_all(&dir)?;

@@ -1,12 +1,15 @@
 :root {
-  color-scheme: light dark;
-  --bg: #fafafa;
-  --fg: #1a1a1a;
-  --muted: #6b7280;
-  --border: #d4d4d8;
-  --surface: #ffffff;
-  --accent: #2563eb;
-  --danger: #dc2626;
+  /* Always dark: the scheme is fixed, not system-dependent. */
+  color-scheme: dark;
+  --bg: #141216;
+  --fg: #e9e5ec;
+  --muted: #9d95a3;
+  --border: #3b3641;
+  --surface: #1d1a21;
+  --burgundy: #800020;
+  --burgundy-fg: #d489a4;
+  --accent: #d489a4;
+  --danger: #e5484d;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 15px;
 }
@@ -54,7 +57,7 @@ body {
 }
 
 .nav .tab:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav .tab.active {
@@ -115,24 +118,24 @@ h3 {
   padding: 1px 6px;
   border-radius: 999px;
   margin-left: 6px;
-  background: #e5e7eb;
-  color: #374151;
+  background: #2f2b34;
+  color: #b6afc0;
   vertical-align: middle;
 }
 
 .badge.venue-theatre {
-  background: #dbeafe;
-  color: #1e40af;
+  background: #232d4d;
+  color: #a3b8f0;
 }
 
 .badge.venue-home {
-  background: #dcfce7;
-  color: #166534;
+  background: #1e3a2a;
+  color: #8fd3a6;
 }
 
 .badge.rewatch {
-  background: #fef3c7;
-  color: #92400e;
+  background: #3d3222;
+  color: #e0b96a;
 }
 
 .badge.unrated {
@@ -147,28 +150,34 @@ h3 {
   flex-shrink: 0;
 }
 
-/* Buttons */
+/* Buttons: burgundy throughout. Secondary buttons are burgundy outlines;
+   the primary action is solid burgundy. */
 .btn {
   font: inherit;
   padding: 6px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--burgundy);
   border-radius: 6px;
-  background: var(--surface);
+  background: transparent;
+  color: var(--burgundy-fg);
   cursor: pointer;
 }
 
 .btn:hover {
-  filter: brightness(0.97);
+  background: rgba(128, 0, 32, 0.25);
 }
 
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--burgundy);
   color: #fff;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.15);
 }
 
 .btn.danger {
   color: var(--danger);
+  border-color: var(--danger);
 }
 
 button.link {
@@ -223,7 +232,7 @@ input[type="text"] {
 }
 
 .result:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .poster {
@@ -364,9 +373,9 @@ textarea.notes {
 
 /* Misc */
 .error-banner {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fcd34d;
+  background: #3a2f14;
+  color: #e6c670;
+  border: 1px solid #8a6d1a;
   border-radius: 6px;
   padding: 8px 12px;
   margin-bottom: 12px;

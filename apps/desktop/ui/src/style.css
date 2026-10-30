@@ -285,6 +285,24 @@ input[type="text"] {
   height: 138px;
 }
 
+/* Data entry: form on the left, poster on the right. */
+.details-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.details-row .details-form {
+  flex: 1;
+  min-width: 0;
+}
+
+.poster.details {
+  width: 92px;
+  height: 138px;
+  flex: none;
+}
+
 .field-row {
   display: flex;
   align-items: center;

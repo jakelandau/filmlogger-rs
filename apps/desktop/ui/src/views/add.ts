@@ -50,15 +50,17 @@ function captureFormat(): void {
 }
 
 export function renderAdd(content: HTMLElement): void {
-  content.append(renderSearch());
-  content.append(renderImdbFinder());
   const s = add.selected;
-  if (s && add.stage === "confirm") {
-    content.append(renderConfirm());
-  } else if (s && add.stage === "details") {
-    content.append(renderSelected());
-  } else {
+  if (s === null) {
+    // Search stage: title search + IMDB finder, with the results below.
+    // The confirm and data-entry stages drop the search fields.
+    content.append(renderSearch());
+    content.append(renderImdbFinder());
     content.append(renderResults());
+  } else if (add.stage === "confirm") {
+    content.append(renderConfirm());
+  } else {
+    content.append(renderSelected());
   }
 }
 
@@ -165,19 +167,32 @@ function renderSelected(): HTMLElement {
 
   const addBtn = el("button", { class: "btn primary", onclick: () => doAdd() }, "Log this film");
 
+  const poster = s.poster
+    ? el("img", { class: "poster details", src: IMAGE_BASE + s.poster, alt: "" })
+    : el("div", { class: "poster details placeholder" });
+  // Data entry: the form on the left, the poster on the right.
   return el(
     "div",
     { class: "selected-card" },
-    el("h3", {}, s.title, s.year != null ? el("span", { class: "dim" }, ` (${s.year})`) : ""),
     el(
       "div",
-      { class: "venue-row" },
-      el("label", {}, venueTheatre, " Theatre"),
-      el("label", {}, venueHome, " Home")
-    ),
-    el("div", { class: "field-row" }, el("label", {}, "Viewing format")),
-    formatArea,
-    el("div", { class: "actions" }, addBtn, el("button", { class: "btn", onclick: () => { add.stage = "confirm"; renderAgain(); } }, "Back"))
+      { class: "details-row" },
+      el(
+        "div",
+        { class: "details-form" },
+        el("h3", {}, s.title, s.year != null ? el("span", { class: "dim" }, ` (${s.year})`) : ""),
+        el(
+          "div",
+          { class: "venue-row" },
+          el("label", {}, venueTheatre, " Theatre"),
+          el("label", {}, venueHome, " Home")
+        ),
+        el("div", { class: "field-row" }, el("label", {}, "Viewing format")),
+        formatArea,
+        el("div", { class: "actions" }, addBtn, el("button", { class: "btn", onclick: () => { add.stage = "confirm"; renderAgain(); } }, "Back"))
+      ),
+      poster
+    )
   );
 }
 

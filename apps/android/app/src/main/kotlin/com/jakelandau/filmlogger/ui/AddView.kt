@@ -13,9 +13,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,8 +73,8 @@ fun posterUrl(path: String?): String? = path?.takeIf { it.isNotBlank() }?.let {
 }
 
 /**
- * The add flow: search TMDB (or find by IMDB id), pick a result, choose
- * venue and viewing format, and log the film.
+ * The add flow: search TMDB (or find by IMDB id), pick a result, confirm
+ * the film, choose venue and viewing format, and log the film.
  */
 @Composable
 fun AddView(
@@ -87,6 +87,8 @@ fun AddView(
     var imdbQuery by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<SearchPage?>(null) }
     var selected by remember { mutableStateOf<SelectedFilm?>(null) }
+    // True once the user has confirmed the picked film (wizard: confirm → details).
+    var confirmed by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
 
     // detail form state (survives selection changes)
@@ -118,6 +120,7 @@ fun AddView(
         scope.launch {
             try {
                 selected = SelectedFilm.fromMovie(logger.findImdb(imdbQuery.trim()))
+                confirmed = false
             } catch (e: LoggerException) {
                 onError(e.message ?: "film not found")
             } finally {
@@ -151,6 +154,7 @@ fun AddView(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(12.dp),
     ) {
         Row(Modifier.fillMaxWidth()) {
@@ -186,32 +190,47 @@ fun AddView(
         }
         val s = selected
         if (s != null) {
-            DetailCard(
-                film = s,
-                venue = venue,
-                onVenue = { venue = it },
-                format = format,
-                onFormat = { format = it },
-                watchedAtInput = watchedAtInput,
-                onWatchedAt = { watchedAtInput = it },
-                rating = rating,
-                onRating = { rating = it },
-                rewatch = rewatch,
-                onRewatch = { rewatch = it },
-                watchCount = watchCount,
-                onWatchCount = { watchCount = it },
-                notes = notes,
-                onNotes = { notes = it },
-                busy = busy,
-                onLog = { doAdd() },
-                onBack = { selected = null },
-            )
+            if (confirmed) {
+                DetailCard(
+                    film = s,
+                    venue = venue,
+                    onVenue = { venue = it },
+                    format = format,
+                    onFormat = { format = it },
+                    watchedAtInput = watchedAtInput,
+                    onWatchedAt = { watchedAtInput = it },
+                    rating = rating,
+                    onRating = { rating = it },
+                    rewatch = rewatch,
+                    onRewatch = { rewatch = it },
+                    watchCount = watchCount,
+                    onWatchCount = { watchCount = it },
+                    notes = notes,
+                    onNotes = { notes = it },
+                    busy = busy,
+                    onLog = { doAdd() },
+                    onBack = { confirmed = false },
+                )
+            } else {
+                ConfirmCard(
+                    film = s,
+                    onBack = { selected = null },
+                    onConfirm = { confirmed = true },
+                )
+            }
         } else {
             val page = results
             if (page != null) {
                 Text("Results", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                ResultsList(page, busy = busy, onSelect = { r -> selected = SelectedFilm.fromSummary(r) })
+                ResultsList(
+                    page,
+                    busy = busy,
+                    onSelect = { r ->
+                        selected = SelectedFilm.fromSummary(r)
+                        confirmed = false
+                    },
+                )
             }
         }
     }
@@ -223,11 +242,11 @@ private fun ResultsList(
     busy: Boolean,
     onSelect: (MovieSummary) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+    Column(
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(page.results) { r ->
+        page.results.forEach { r ->
             val s = SelectedFilm.fromSummary(r)
             ResultRow(s, busy = busy, onClick = { onSelect(r) })
         }
@@ -337,7 +356,7 @@ private fun DetailCard(
             }
 
             Spacer(Modifier.height(12.dp))
-            TextButton(onClick = onBack) { Text("‹ Back to results") }
+            TextButton(onClick = onBack) { Text("‹ Back") }
             Spacer(Modifier.height(8.dp))
 
             // venue
@@ -419,6 +438,68 @@ private fun DetailCard(
 
             Button(onClick = onLog, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Text("Log this film")
+            }
+        }
+    }
+}
+
+/**
+ * The confirmation step: shows the picked film (poster, title, year, IMDB
+ * id when known) so the user can verify it before entering details.
+ */
+@Composable
+private fun ConfirmCard(
+    film: SelectedFilm,
+    onBack: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+        ) {
+            Row {
+                val poster = posterUrl(film.posterPath)
+                if (poster != null) {
+                    AsyncImage(
+                        model = poster,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (film.year != null) "${film.title} (${film.year})" else film.title,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    if (film.imdbId != null) {
+                        Text(
+                            film.imdbId,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Is this the film you watched?",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth()) {
+                TextButton(onClick = onBack) { Text("‹ Back") }
+                Spacer(Modifier.weight(1f))
+                Button(onClick = onConfirm) { Text("Confirm") }
             }
         }
     }

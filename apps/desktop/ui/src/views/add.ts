@@ -1,7 +1,7 @@
-// Add a film: search TMDB, pick a result, choose venue + optional format,
-// then log it. Local UI state lives in this module; the whole view is
-// re-rendered on each change, so format selections are captured into
-// `add.format` before any re-render.
+// Add a film: search TMDB, pick a result, confirm the film, choose venue +
+// optional format, then log it. Local UI state lives in this module; the
+// whole view is re-rendered on each change, so format selections are
+// captured into `add.format` before any re-render.
 import { el } from "../dom";
 import { api } from "../api";
 import { go, reload, showError } from "../app";
@@ -11,10 +11,15 @@ import type { Format, Movie, MovieSummary, Venue } from "../types";
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w92";
 
+/// Wizard stage: results list, film confirmation, or data entry.
+type Stage = "search" | "confirm" | "details";
+
 interface Selected {
   id: number;
   title: string;
   year: number | null;
+  poster: string | null;
+  imdbId: string | null;
 }
 
 interface AddState {
@@ -22,6 +27,7 @@ interface AddState {
   results: MovieSummary[];
   total_pages: number;
   selected: Selected | null;
+  stage: Stage;
   venue: Venue;
   format: Format | null;
 }
@@ -31,6 +37,7 @@ const add: AddState = {
   results: [],
   total_pages: 0,
   selected: null,
+  stage: "search",
   venue: "theatre",
   format: null,
 };
@@ -45,8 +52,14 @@ function captureFormat(): void {
 export function renderAdd(content: HTMLElement): void {
   content.append(renderSearch());
   content.append(renderImdbFinder());
-  content.append(renderResults());
-  if (add.selected) content.append(renderSelected());
+  const s = add.selected;
+  if (s && add.stage === "confirm") {
+    content.append(renderConfirm());
+  } else if (s && add.stage === "details") {
+    content.append(renderSelected());
+  } else {
+    content.append(renderResults());
+  }
 }
 
 function renderSearch(): HTMLElement {
@@ -92,6 +105,46 @@ function renderResults(): HTMLElement {
   return box;
 }
 
+// Step 2: confirm the picked film before entering details.
+function renderConfirm(): HTMLElement {
+  const s = add.selected as Selected;
+  const poster = s.poster
+    ? el("img", { class: "poster confirm", src: IMAGE_BASE + s.poster, alt: "" })
+    : el("div", { class: "poster confirm placeholder" });
+  const back = el(
+    "button",
+    {
+      class: "btn",
+      onclick: () => {
+        add.selected = null;
+        add.stage = "search";
+        add.format = null;
+        controls = null;
+        renderAgain();
+      },
+    },
+    "Back"
+  );
+  const confirm = el(
+    "button",
+    { class: "btn primary", onclick: () => { add.stage = "details"; renderAgain(); } },
+    "Confirm film"
+  );
+  return el(
+    "div",
+    { class: "selected-card" },
+    el(
+      "div",
+      { class: "confirm-head" },
+      poster,
+      el("h3", {}, s.title, s.year != null ? el("span", { class: "dim" }, ` (${s.year})`) : "")
+    ),
+    s.imdbId ? el("div", { class: "dim" }, s.imdbId) : "",
+    el("p", {}, "Is this the film you watched?"),
+    el("div", { class: "actions" }, back, confirm)
+  );
+}
+
 function renderSelected(): HTMLElement {
   const s = add.selected as Selected;
 
@@ -124,7 +177,7 @@ function renderSelected(): HTMLElement {
     ),
     el("div", { class: "field-row" }, el("label", {}, "Viewing format")),
     formatArea,
-    el("div", { class: "actions" }, addBtn, el("button", { class: "btn", onclick: () => { add.selected = null; add.format = null; controls = null; renderAgain(); } }, "Back"))
+    el("div", { class: "actions" }, addBtn, el("button", { class: "btn", onclick: () => { add.stage = "confirm"; renderAgain(); } }, "Back"))
   );
 }
 
@@ -151,8 +204,17 @@ async function doSearch(): Promise<void> {
   }
 }
 
-function select(r: { id: number; title: string; release_date: string | null }): void {
-  add.selected = { id: r.id, title: r.title, year: r.release_date ? Number(r.release_date.slice(0, 4)) : null };
+function select(r: MovieSummary | Movie): void {
+  add.selected = {
+    id: r.id,
+    title: r.title,
+    year: r.release_date ? Number(r.release_date.slice(0, 4)) : null,
+    poster: r.poster_path,
+    imdbId: "imdb_id" in r ? r.imdb_id : null,
+  };
+  add.stage = "confirm";
+  add.format = null;
+  controls = null;
   renderAgain();
 }
 
@@ -163,6 +225,7 @@ async function doAdd(): Promise<void> {
   try {
     await api.addFilm(s.id, add.venue, format);
     add.selected = null;
+    add.stage = "search";
     add.results = [];
     add.format = null;
     controls = null;

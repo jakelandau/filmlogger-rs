@@ -190,11 +190,28 @@ button.link {
 }
 
 /* Search + results */
-.search-bar,
+.search-bar {
+  margin-bottom: 12px;
+}
+
+.search-form,
 .imdb-finder {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* Equal-width actions so both input fields span the same width. */
+.search-form .btn,
+.imdb-finder .btn {
+  min-width: 115px;
+}
+
+/* Fixed, equal-width fields so both rows are identical and centred. */
+.search-form .search,
+.imdb-finder .search {
+  flex: none;
+  width: 400px;
 }
 
 .search,
@@ -254,6 +271,18 @@ input[type="text"] {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
+}
+
+/* Confirm step: poster beside the picked film's title. */
+.confirm-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.poster.confirm {
+  width: 92px;
+  height: 138px;
 }
 
 .field-row {

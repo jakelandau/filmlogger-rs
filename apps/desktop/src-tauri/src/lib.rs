@@ -133,6 +133,20 @@ fn search_movies(
         .map_err(|e| e.to_string())
 }
 
+/// The currently popular movies.
+#[tauri::command]
+fn popular_movies(
+    state: tauri::State<AppState>,
+    page: i32,
+) -> Result<SearchPage, String> {
+    state
+        .logger
+        .lock()
+        .unwrap()
+        .popular_movies(page)
+        .map_err(|e| e.to_string())
+}
+
 /// Find a film by IMDB id, resolving it to a full TMDB record.
 #[tauri::command]
 fn find_imdb(state: tauri::State<AppState>, imdb_id: String) -> Result<Movie, String> {
@@ -178,6 +192,7 @@ pub fn run() {
             export_to,
             import_from,
             search_movies,
+            popular_movies,
             find_imdb
         ])
         .run(tauri::generate_context!())

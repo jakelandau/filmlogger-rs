@@ -201,6 +201,19 @@ button.link {
   gap: 12px;
 }
 
+/* Spacing between the IMDB finder and the film list below it. */
+.imdb-finder {
+  margin-bottom: 12px;
+}
+
+/* Label above the pre-search popular list. */
+.results-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 /* Equal-width actions so both input fields span the same width. */
 .search-form .btn,
 .imdb-finder .btn {

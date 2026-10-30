@@ -44,5 +44,6 @@ export const api = {
   importFrom: (path: string) => invoke<void>("import_from", { path }),
   searchMovies: (query: string, page: number) =>
     invoke<SearchPage>("search_movies", { query, page }),
+  popularMovies: (page: number) => invoke<SearchPage>("popular_movies", { page }),
   findImdb: (imdbId: string) => invoke<Movie>("find_imdb", { imdbId: imdbId }),
 };

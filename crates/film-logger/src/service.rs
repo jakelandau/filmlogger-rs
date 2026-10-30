@@ -68,6 +68,15 @@ impl FilmLogger {
         self.client.search_movies(query, page)
     }
 
+    /// The currently popular movies.
+    ///
+    /// # Errors
+    ///
+    /// Returns TMDB or HTTP errors.
+    pub fn popular_movies(&self, page: i32) -> Result<SearchPage, Error> {
+        self.client.popular_movies(page)
+    }
+
     /// Find a film by IMDB id, resolving it to a full TMDB record.
     ///
     /// # Errors

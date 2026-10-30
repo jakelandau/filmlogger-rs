@@ -26,6 +26,11 @@ interface AddState {
   query: string;
   results: MovieSummary[];
   total_pages: number;
+  // Popular films, shown before any search so the list isn't empty.
+  popular: MovieSummary[];
+  popularLoading: boolean;
+  // True once a title search has run; the list then shows search results.
+  searched: boolean;
   selected: Selected | null;
   stage: Stage;
   venue: Venue;
@@ -36,6 +41,9 @@ const add: AddState = {
   query: "",
   results: [],
   total_pages: 0,
+  popular: [],
+  popularLoading: false,
+  searched: false,
   selected: null,
   stage: "search",
   venue: "theatre",
@@ -57,6 +65,7 @@ export function renderAdd(content: HTMLElement): void {
     content.append(renderSearch());
     content.append(renderImdbFinder());
     content.append(renderResults());
+    ensurePopular();
   } else if (add.stage === "confirm") {
     content.append(renderConfirm());
   } else {
@@ -84,27 +93,59 @@ function renderSearch(): HTMLElement {
   return el("div", { class: "search-bar" }, form);
 }
 
+// Fetch and cache the popular films once, before any search runs, so the
+// list shows something rather than empty space.
+let popularStarted = false;
+function ensurePopular(): void {
+  if (popularStarted || add.searched) return;
+  popularStarted = true;
+  add.popularLoading = true;
+  api
+    .popularMovies(1)
+    .then((page) => {
+      add.popular = page.results;
+      add.popularLoading = false;
+      renderAgain();
+    })
+    .catch((e) => {
+      add.popularLoading = false;
+      showError(e);
+    });
+}
+
 function renderResults(): HTMLElement {
   const box = el("div", { class: "results" });
-  if (add.results.length === 0) return box;
-  const list = el("ul", { class: "result-list" });
-  for (const r of add.results) {
-    list.append(
-      el(
-        "li",
-        { class: "result", onclick: () => select(r) },
-        r.poster_path
-          ? el("img", { class: "poster", src: IMAGE_BASE + r.poster_path, alt: "" })
-          : el("div", { class: "poster placeholder" }),
-        el("div", { class: "result-text" },
-          r.title,
-          r.release_date ? el("span", { class: "dim" }, ` (${r.release_date.slice(0, 4)})`) : ""
-        )
-      )
-    );
+  // Before a search is entered, show the popular films so the list isn't
+  // empty; once a search has run, show its results instead.
+  const list = add.searched ? add.results : add.popular;
+  if (!add.searched) {
+    box.append(el("p", { class: "results-label" }, "Popular right now"));
+    if (add.popularLoading) {
+      box.append(el("p", { class: "empty" }, "Loading…"));
+      return box;
+    }
   }
-  box.append(list);
+  if (list.length === 0) return box;
+  const ul = el("ul", { class: "result-list" });
+  for (const r of list) ul.append(renderResultRow(r));
+  box.append(ul);
   return box;
+}
+
+function renderResultRow(r: MovieSummary): HTMLElement {
+  return el(
+    "li",
+    { class: "result", onclick: () => select(r) },
+    r.poster_path
+      ? el("img", { class: "poster", src: IMAGE_BASE + r.poster_path, alt: "" })
+      : el("div", { class: "poster placeholder" }),
+    el(
+      "div",
+      { class: "result-text" },
+      r.title,
+      r.release_date ? el("span", { class: "dim" }, ` (${r.release_date.slice(0, 4)})`) : ""
+    )
+  );
 }
 
 // Step 2: confirm the picked film before entering details.
@@ -213,6 +254,7 @@ async function doSearch(): Promise<void> {
     const page = await api.searchMovies(query, 1);
     add.results = page.results;
     add.total_pages = page.total_pages;
+    add.searched = true;
     renderAgain();
   } catch (e) {
     showError(e);
@@ -242,6 +284,7 @@ async function doAdd(): Promise<void> {
     add.selected = null;
     add.stage = "search";
     add.results = [];
+    add.searched = false;
     add.format = null;
     controls = null;
     await reload();

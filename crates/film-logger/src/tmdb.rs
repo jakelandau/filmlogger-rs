@@ -288,6 +288,21 @@ impl TmdbClient {
         Ok(page.into())
     }
 
+    /// The currently popular movies.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Api`] on an HTTP error status, [`Error::Serde`] if
+    /// the response body is not valid JSON, or [`Error::Http`] on
+    /// connection, timeout, or other transport errors.
+    pub fn popular_movies(&self, page: i32) -> Result<SearchPage, Error> {
+        let page = self
+            .movies
+            .get_movie_popular_paginated(Some("en"), Some(page), None)
+            .map_err(Self::from_tmdb_error)?;
+        Ok(page.into())
+    }
+
     /// Fetch the film's board certifications from its release dates.
     ///
     /// TMDB's release-dates response carries per-region `certification`

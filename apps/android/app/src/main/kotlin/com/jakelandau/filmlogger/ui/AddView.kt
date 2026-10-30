@@ -157,68 +157,41 @@ fun AddView(
             .verticalScroll(rememberScrollState())
             .padding(12.dp),
     ) {
-        Row(Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                modifier = Modifier.weight(1f),
-                label = { Text("Film title") },
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { doSearch() }, enabled = !busy) { Text("Search") }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth()) {
-            OutlinedTextField(
-                value = imdbQuery,
-                onValueChange = { imdbQuery = it },
-                modifier = Modifier.weight(1f),
-                label = { Text("IMDB id (tt1234567)") },
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { doFind() }, enabled = !busy) { Text("Find") }
-        }
-        Spacer(Modifier.height(12.dp))
-        if (busy) {
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(Modifier.size(24.dp))
+        val s = selected
+        if (s == null) {
+            // Search stage: title search + IMDB finder. The confirm and
+            // data-entry stages drop these fields.
+            Row(Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Film title") },
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { doSearch() }, enabled = !busy) { Text("Search") }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = imdbQuery,
+                    onValueChange = { imdbQuery = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("IMDB id (tt1234567)") },
+                )
+                Spacer(Modifier.width(8.dp))
+                Button(onClick = { doFind() }, enabled = !busy) { Text("Find") }
             }
             Spacer(Modifier.height(12.dp))
-        }
-        val s = selected
-        if (s != null) {
-            if (confirmed) {
-                DetailCard(
-                    film = s,
-                    venue = venue,
-                    onVenue = { venue = it },
-                    format = format,
-                    onFormat = { format = it },
-                    watchedAtInput = watchedAtInput,
-                    onWatchedAt = { watchedAtInput = it },
-                    rating = rating,
-                    onRating = { rating = it },
-                    rewatch = rewatch,
-                    onRewatch = { rewatch = it },
-                    watchCount = watchCount,
-                    onWatchCount = { watchCount = it },
-                    notes = notes,
-                    onNotes = { notes = it },
-                    busy = busy,
-                    onLog = { doAdd() },
-                    onBack = { confirmed = false },
-                )
-            } else {
-                ConfirmCard(
-                    film = s,
-                    onBack = { selected = null },
-                    onConfirm = { confirmed = true },
-                )
+            if (busy) {
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(Modifier.size(24.dp))
+                }
+                Spacer(Modifier.height(12.dp))
             }
-        } else {
             val page = results
             if (page != null) {
                 Text("Results", style = MaterialTheme.typography.titleMedium)
@@ -232,6 +205,33 @@ fun AddView(
                     },
                 )
             }
+        } else if (confirmed) {
+            DetailCard(
+                film = s,
+                venue = venue,
+                onVenue = { venue = it },
+                format = format,
+                onFormat = { format = it },
+                watchedAtInput = watchedAtInput,
+                onWatchedAt = { watchedAtInput = it },
+                rating = rating,
+                onRating = { rating = it },
+                rewatch = rewatch,
+                onRewatch = { rewatch = it },
+                watchCount = watchCount,
+                onWatchCount = { watchCount = it },
+                notes = notes,
+                onNotes = { notes = it },
+                busy = busy,
+                onLog = { doAdd() },
+                onBack = { confirmed = false },
+            )
+        } else {
+            ConfirmCard(
+                film = s,
+                onBack = { selected = null },
+                onConfirm = { confirmed = true },
+            )
         }
     }
 }
@@ -322,19 +322,10 @@ private fun DetailCard(
                 .fillMaxWidth()
                 .padding(12.dp),
         ) {
-            Row {
-                val poster = posterUrl(film.posterPath)
-                if (poster != null) {
-                    AsyncImage(
-                        model = poster,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.Crop,
-                    )
-                    Spacer(Modifier.width(12.dp))
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text(
                         if (film.year != null) "${film.title} (${film.year})" else film.title,
@@ -352,92 +343,106 @@ private fun DetailCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = onBack) { Text("‹ Back") }
+                    Spacer(Modifier.height(8.dp))
+
+                    // venue
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = venue == Venue.THEATRE,
+                            onClick = { onVenue(Venue.THEATRE) },
+                        )
+                        Text("Theatre")
+                        Spacer(Modifier.width(16.dp))
+                        RadioButton(
+                            selected = venue == Venue.HOME,
+                            onClick = { onVenue(Venue.HOME) },
+                        )
+                        Text("Home")
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // viewing format
+                    key(venue) {
+                        FormatPicker(venue, format, onFormat)
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // watched at
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = watchedAtInput,
+                            onValueChange = onWatchedAt,
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Watched (local: yyyy-MM-dd HH:mm)") },
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedButton(onClick = { onWatchedAt(TimeUtils.toLocalInput(Instant.now().toString())) }) {
+                            Text("Now")
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // rating
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Rating:")
+                        Spacer(Modifier.width(8.dp))
+                        RadioButton(selected = rating == null, onClick = { onRating(null) })
+                        Text("none")
+                        Spacer(Modifier.width(8.dp))
+                        RadioButton(selected = rating == Rating.UP, onClick = { onRating(Rating.UP) })
+                        Text("👍")
+                        Spacer(Modifier.width(8.dp))
+                        RadioButton(selected = rating == Rating.DOWN, onClick = { onRating(Rating.DOWN) })
+                        Text("👎")
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // rewatch + watch count
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = rewatch, onCheckedChange = onRewatch)
+                        Text("Rewatch")
+                        Spacer(Modifier.width(16.dp))
+                        Text("Count:")
+                        Spacer(Modifier.width(8.dp))
+                        OutlinedTextField(
+                            value = watchCount,
+                            onValueChange = onWatchCount,
+                            modifier = Modifier.width(80.dp),
+                            label = { Text("#") },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // notes
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = onNotes,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Notes") },
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    Button(onClick = onLog, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Log this film")
+                    }
                 }
-            }
-
-            Spacer(Modifier.height(12.dp))
-            TextButton(onClick = onBack) { Text("‹ Back") }
-            Spacer(Modifier.height(8.dp))
-
-            // venue
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = venue == Venue.THEATRE,
-                    onClick = { onVenue(Venue.THEATRE) },
-                )
-                Text("Theatre")
-                Spacer(Modifier.width(16.dp))
-                RadioButton(
-                    selected = venue == Venue.HOME,
-                    onClick = { onVenue(Venue.HOME) },
-                )
-                Text("Home")
-            }
-            Spacer(Modifier.height(8.dp))
-
-            // viewing format
-            key(venue) {
-                FormatPicker(venue, format, onFormat)
-            }
-            Spacer(Modifier.height(8.dp))
-
-            // watched at
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = watchedAtInput,
-                    onValueChange = onWatchedAt,
-                    modifier = Modifier.weight(1f),
-                    label = { Text("Watched (local: yyyy-MM-dd HH:mm)") },
-                )
-                Spacer(Modifier.width(8.dp))
-                OutlinedButton(onClick = { onWatchedAt(TimeUtils.toLocalInput(Instant.now().toString())) }) {
-                    Text("Now")
+                // The poster, on the right of the data entry.
+                val poster = posterUrl(film.posterPath)
+                if (poster != null) {
+                    Spacer(Modifier.width(12.dp))
+                    AsyncImage(
+                        model = poster,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .width(64.dp)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.FillBounds,
+                    )
                 }
-            }
-            Spacer(Modifier.height(8.dp))
-
-            // rating
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("Rating:")
-                Spacer(Modifier.width(8.dp))
-                RadioButton(selected = rating == null, onClick = { onRating(null) })
-                Text("none")
-                Spacer(Modifier.width(8.dp))
-                RadioButton(selected = rating == Rating.UP, onClick = { onRating(Rating.UP) })
-                Text("👍")
-                Spacer(Modifier.width(8.dp))
-                RadioButton(selected = rating == Rating.DOWN, onClick = { onRating(Rating.DOWN) })
-                Text("👎")
-            }
-            Spacer(Modifier.height(8.dp))
-
-            // rewatch + watch count
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = rewatch, onCheckedChange = onRewatch)
-                Text("Rewatch")
-                Spacer(Modifier.width(16.dp))
-                Text("Count:")
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(
-                    value = watchCount,
-                    onValueChange = onWatchCount,
-                    modifier = Modifier.width(80.dp),
-                    label = { Text("#") },
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-
-            // notes
-            OutlinedTextField(
-                value = notes,
-                onValueChange = onNotes,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Notes") },
-            )
-            Spacer(Modifier.height(12.dp))
-
-            Button(onClick = onLog, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                Text("Log this film")
             }
         }
     }

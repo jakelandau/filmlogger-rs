@@ -394,29 +394,6 @@ impl Logger {
         Ok(film.into())
     }
 
-    /// Replace a film's tags (normalized and capped).
-    ///
-    /// # Panics
-    ///
-    /// Panics if the logger's internal mutex is poisoned.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`LoggerError::FilmNotFound`] if the film is not stored.
-    pub fn set_tags(
-        &self,
-        film_id: FilmId,
-        tags: Vec<String>,
-    ) -> Result<FilmMetadata, LoggerError> {
-        let film = self
-            .inner
-            .lock()
-            .expect("logger poisoned")
-            .set_tags(&film_id.into(), tags)
-            .map_err(LoggerError::from)?;
-        Ok(film.into())
-    }
-
     /// The viewing-format catalog both apps render.
     ///
     /// # Panics

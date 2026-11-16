@@ -447,8 +447,6 @@ pub struct FilmMetadata {
     pub certifications: Option<Certifications>,
     /// The collection the film belongs to, if any.
     pub collection: Option<CollectionRef>,
-    /// User tags.
-    pub tags: Vec<String>,
     /// Whether the user marked the film a favorite.
     pub favorite: bool,
     /// Whether the user put the film on their watchlist.

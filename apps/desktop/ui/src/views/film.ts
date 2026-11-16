@@ -1,4 +1,4 @@
-// One film's page: metadata, user state (favorite, tags), metadata refresh,
+// One film's page: metadata, user state (favorite), metadata refresh,
 // viewing statistics, and the viewing history.
 import { el } from "../dom";
 import { api } from "../api";
@@ -116,13 +116,6 @@ function certificationsLine(certs: Certifications | null): HTMLElement | null {
 
 function renderActions(page: FilmPage): HTMLElement {
   const film = page.film;
-  const tagInput = el("input", {
-    class: "text",
-    type: "text",
-    placeholder: "tags, comma separated",
-    value: film.tags.join(", "),
-  });
-
   return el(
     "div",
     { class: "film-actions" },
@@ -147,28 +140,6 @@ function renderActions(page: FilmPage): HTMLElement {
       "button",
       { class: "btn primary", onclick: () => startAddForFilm(film) },
       "Log another viewing"
-    ),
-    el(
-      "div",
-      { class: "tag-editor" },
-      tagInput,
-      el(
-        "button",
-        {
-          class: "btn",
-          onclick: () =>
-            void mutate(() =>
-              api.setTags(
-                film.film_id,
-                tagInput.value
-                  .split(",")
-                  .map((tag) => tag.trim())
-                  .filter((tag) => tag !== "")
-              )
-            ),
-        },
-        "Save tags"
-      )
     )
   );
 }

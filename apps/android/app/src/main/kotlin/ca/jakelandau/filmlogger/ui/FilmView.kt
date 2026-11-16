@@ -16,16 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,7 +54,6 @@ fun FilmView(
     }
     val film = page.film
     val scope = rememberCoroutineScope()
-    var tags by remember(film.filmId) { mutableStateOf(film.tags.joinToString(", ")) }
 
     fun mutate(action: suspend () -> Unit) {
         scope.launch {
@@ -172,23 +166,6 @@ fun FilmView(
                         modifier = Modifier.weight(1f),
                     ) { Text("Log viewing", style = MaterialTheme.typography.labelLarge) }
                 }
-                Spacer(Modifier.height(14.dp))
-                OutlinedTextField(
-                    value = tags,
-                    onValueChange = { tags = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Tags (comma separated)") },
-                    singleLine = true,
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        val parsed = tags.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                        mutate { logger.setTags(film.filmId, parsed) }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Save tags", style = MaterialTheme.typography.labelLarge) }
-
                 Spacer(Modifier.height(18.dp))
                 val stats = page.stats
                 Surface(

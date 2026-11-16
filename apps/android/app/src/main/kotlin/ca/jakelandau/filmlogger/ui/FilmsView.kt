@@ -51,8 +51,7 @@ fun FilmsView(
             FilmTab.FAVORITES -> entry.film.favorite
         } &&
             (needle.isEmpty() ||
-                entry.film.title.lowercase().contains(needle) ||
-                entry.film.tags.any { it.lowercase().contains(needle) })
+                entry.film.title.lowercase().contains(needle))
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -180,14 +179,6 @@ private fun FilmRow(entry: FilmListEntry, onClick: () -> Unit) {
                         Spacer(Modifier.width(8.dp))
                         Text("★ Favorite", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     }
-                }
-                if (film.tags.isNotEmpty()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        film.tags.joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }

@@ -584,7 +584,6 @@ impl From<core::FilmMetadata> for FilmMetadata {
             cast: f.cast.into_iter().map(Into::into).collect(),
             certifications: f.certifications.map(Into::into),
             collection: f.collection.map(Into::into),
-            tags: f.tags,
             favorite: f.favorite,
             watchlisted: f.watchlisted,
             metadata_refreshed_at: f.metadata_refreshed_at.map(|d| d.to_rfc3339()),

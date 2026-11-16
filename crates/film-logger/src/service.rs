@@ -223,19 +223,6 @@ impl FilmLogger {
         self.store.get_film(film_id)?.ok_or(Error::FilmNotFound)
     }
 
-    /// Replace a film's tags (normalized and capped), returning the stored
-    /// film.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Error::FilmNotFound`] if the film is not stored, otherwise
-    /// store errors.
-    pub fn set_tags(&self, film_id: &FilmId, tags: Vec<String>) -> Result<FilmMetadata, Error> {
-        let tags = FilmMetadata::normalize_tags(tags);
-        self.store.set_tags(film_id, &tags)?;
-        self.store.get_film(film_id)?.ok_or(Error::FilmNotFound)
-    }
-
     /// The viewing-format catalog both apps render.
     #[must_use]
     pub fn format_catalog(&self) -> FormatCatalog {

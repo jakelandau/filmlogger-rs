@@ -1,5 +1,5 @@
 // The film library: every stored film with its viewing summary, filterable
-// by favorites and searchable by title or tag.
+// by favorites and searchable by title.
 import { el } from "../dom";
 import { getState, go } from "../app";
 import { formatDisplay } from "../time";
@@ -19,10 +19,7 @@ export function renderFilms(content: HTMLElement): void {
   const visible = films.filter((entry) => {
     if (tab === "favorites" && !entry.film.favorite) return false;
     if (needle === "") return true;
-    return (
-      entry.film.title.toLowerCase().includes(needle) ||
-      entry.film.tags.some((tag) => tag.toLowerCase().includes(needle))
-    );
+    return entry.film.title.toLowerCase().includes(needle);
   });
 
   if (films.length === 0) {
@@ -79,7 +76,7 @@ function renderControls(): HTMLElement {
     el("input", {
       class: "search",
       type: "text",
-      placeholder: "Search title or tag…",
+      placeholder: "Search title…",
       value: search,
       oninput: (e: Event) => {
         search = (e.currentTarget as HTMLInputElement).value;
@@ -95,12 +92,6 @@ function renderRow(entry: FilmListEntry): HTMLElement {
   const poster = film.poster_path
     ? el("img", { class: "poster", src: IMAGE_BASE + film.poster_path, alt: "" })
     : el("div", { class: "poster placeholder" });
-
-  const tags = el(
-    "span",
-    { class: "film-tags" },
-    ...film.tags.map((tag) => el("span", { class: "tag" }, tag))
-  );
 
   return el(
     "div",
@@ -123,8 +114,7 @@ function renderRow(entry: FilmListEntry): HTMLElement {
         entry.last_watched_at
           ? el("span", { class: "dim" }, " · last " + formatDisplay(entry.last_watched_at))
           : ""
-      ),
-      tags
+      )
     )
   );
 }

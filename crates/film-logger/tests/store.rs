@@ -220,11 +220,11 @@ fn schema_newer_than_build_is_rejected() {
     // Stamp a schema version this build does not understand.
     {
         let conn = Connection::open(&path).unwrap();
-        conn.execute_batch("PRAGMA user_version = 3").unwrap();
+        conn.execute_batch("PRAGMA user_version = 4").unwrap();
     }
 
     let err = Store::open(&path).unwrap_err();
-    assert!(matches!(err, Error::SchemaTooNew { version: 3 }));
+    assert!(matches!(err, Error::SchemaTooNew { version: 4 }));
 }
 
 #[test]
@@ -282,7 +282,39 @@ fn migration_v1_preserves_logs_and_builds_films() {
         .unwrap()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
+}
+
+#[test]
+fn migration_v2_drops_tags() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("v2.db");
+    drop(Store::open(&path).unwrap());
+
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE films ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+    }
+
+    let store = Store::open(&path).unwrap();
+    drop(store);
+
+    let conn = Connection::open(&path).unwrap();
+    let has_tags: bool = conn
+        .prepare("PRAGMA table_info(films)")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(1))
+        .unwrap()
+        .any(|name| name.unwrap() == "tags");
+    assert!(!has_tags);
+    let version: i64 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 3);
 }
 
 #[test]
@@ -333,9 +365,6 @@ fn film_upsert_preserves_user_state() {
         .insert(test_log(film_id.clone(), "Fight Club", Venue::Theatre))
         .unwrap();
     store.set_favorite(&film_id, true).unwrap();
-    store
-        .set_tags(&film_id, &["noir".to_owned(), "classic".to_owned()])
-        .unwrap();
 
     let mut film: FilmMetadata = store.get_film(&film_id).unwrap().unwrap();
     film.title = "Fight Club (Remastered)".into();
@@ -345,8 +374,4 @@ fn film_upsert_preserves_user_state() {
     let refreshed = store.get_film(&film_id).unwrap().unwrap();
     assert_eq!(refreshed.title, "Fight Club (Remastered)");
     assert!(refreshed.favorite);
-    assert_eq!(
-        refreshed.tags,
-        vec!["noir".to_owned(), "classic".to_owned()]
-    );
 }

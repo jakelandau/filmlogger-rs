@@ -1,7 +1,7 @@
 //! SQLite-backed watch log store.
 //!
 //! Two tables hold the product's data: `films` carries one row per film
-//! (TMDB metadata plus the user's own tags/favorites/watchlist state) and
+//! (TMDB metadata plus the user's own favorites/watchlist state) and
 //! `watch_log` carries one JSON document per viewing, with a denormalized
 //! `film_id` and `watched_at_ms` so rows can be filtered and ordered without
 //! parsing every document.
@@ -26,13 +26,13 @@ use crate::error::Error;
 const SETTINGS_KEY: &str = "settings";
 
 /// The schema version this build creates and understands.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 /// The `films` columns, in [`RawFilmRow`] order.
 const FILM_COLUMNS: &str = "film_id, tmdb_id, imdb_id, title, original_title, \
      release_date, release_year, runtime_minutes, overview, tagline, \
      original_language, poster_path, backdrop_path, vote_average, vote_count, \
-     popularity, adult, genres, \"cast\", certifications, collection, tags, \
+     popularity, adult, genres, \"cast\", certifications, collection, \
      favorite, watchlisted, metadata_refreshed_at";
 
 /// [`FILM_COLUMNS`] qualified with the `f` alias (for joins).
@@ -40,7 +40,7 @@ const FILM_COLUMNS_F: &str = "f.film_id, f.tmdb_id, f.imdb_id, f.title, \
      f.original_title, f.release_date, f.release_year, f.runtime_minutes, \
      f.overview, f.tagline, f.original_language, f.poster_path, \
      f.backdrop_path, f.vote_average, f.vote_count, f.popularity, f.adult, \
-     f.genres, f.\"cast\", f.certifications, f.collection, f.tags, f.favorite, \
+     f.genres, f.\"cast\", f.certifications, f.collection, f.favorite, \
      f.watchlisted, f.metadata_refreshed_at";
 
 /// SQLite-backed watch log store.
@@ -223,7 +223,7 @@ impl Store {
 
     /// Insert or update a film's TMDB-sourced metadata.
     ///
-    /// The user-owned columns (`tags`, `favorite`, `watchlisted`) and
+    /// The user-owned columns (`favorite`, `watchlisted`) and
     /// `created_at` are preserved on update, so a refresh never loses them.
     ///
     /// # Errors
@@ -298,25 +298,6 @@ impl Store {
         let n = self.conn.execute(
             "UPDATE films SET favorite = ?2 WHERE film_id = ?1",
             params![film_id.key(), i64::from(favorite)],
-        )?;
-        if n == 0 {
-            return Err(Error::FilmNotFound);
-        }
-        Ok(())
-    }
-
-    /// Replace a film's tags.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Error::FilmNotFound`] if the film is not stored,
-    /// [`Error::Sqlite`] on a write failure, or [`Error::Serde`] if the tags
-    /// cannot be serialized.
-    pub fn set_tags(&self, film_id: &FilmId, tags: &[String]) -> Result<(), Error> {
-        let tags = serde_json::to_string(tags)?;
-        let n = self.conn.execute(
-            "UPDATE films SET tags = ?2 WHERE film_id = ?1",
-            params![film_id.key(), tags],
         )?;
         if n == 0 {
             return Err(Error::FilmNotFound);
@@ -531,13 +512,17 @@ impl Store {
             .query_row("PRAGMA user_version", [], |row| row.get(0))?;
         match version {
             0 => self.create_schema(),
-            1 => self.migrate_v1_to_v2(),
-            2 => Ok(()),
+            1 => {
+                self.migrate_v1_to_v2()?;
+                self.migrate_v2_to_v3()
+            }
+            2 => self.migrate_v2_to_v3(),
+            3 => Ok(()),
             v => Err(Error::SchemaTooNew { version: v }),
         }
     }
 
-    /// Create the v2 schema and stamp [`SCHEMA_VERSION`].
+    /// Create the current schema and stamp [`SCHEMA_VERSION`].
     fn create_schema(&self) -> Result<(), Error> {
         self.conn.execute_batch(&format!(
             "CREATE TABLE IF NOT EXISTS films (
@@ -562,7 +547,6 @@ impl Store {
                 \"cast\" TEXT NOT NULL DEFAULT '[]',
                 certifications TEXT,
                 collection TEXT,
-                tags TEXT NOT NULL DEFAULT '[]',
                 favorite INTEGER NOT NULL DEFAULT 0,
                 watchlisted INTEGER NOT NULL DEFAULT 0,
                 metadata_refreshed_at TEXT,
@@ -657,9 +641,18 @@ impl Store {
              CREATE INDEX films_title ON films(title);
              CREATE INDEX films_tmdb_id ON films(tmdb_id);",
         )?;
-        tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        tx.pragma_update(None, "user_version", 2)?;
         tx.commit()?;
         self.conn.pragma_update(None, "foreign_keys", "ON")?;
+        Ok(())
+    }
+
+    /// Drop the unused `films.tags` column and stamp v3.
+    fn migrate_v2_to_v3(&self) -> Result<(), Error> {
+        self.conn.execute_batch(
+            "ALTER TABLE films DROP COLUMN tags;
+             PRAGMA user_version = 3;",
+        )?;
         Ok(())
     }
 
@@ -736,7 +729,7 @@ impl Store {
 }
 
 /// The number of columns in [`FILM_COLUMNS`].
-const FILM_COLUMN_COUNT: usize = 25;
+const FILM_COLUMN_COUNT: usize = 24;
 
 /// Apply the store's connection pragmas.
 fn configure(conn: &Connection) -> Result<(), Error> {
@@ -779,7 +772,6 @@ struct RawFilmRow {
     cast: String,
     certifications: Option<String>,
     collection: Option<String>,
-    tags: String,
     favorite: i64,
     watchlisted: i64,
     metadata_refreshed_at: Option<String>,
@@ -809,10 +801,9 @@ impl RawFilmRow {
             cast: row.get(18)?,
             certifications: row.get(19)?,
             collection: row.get(20)?,
-            tags: row.get(21)?,
-            favorite: row.get(22)?,
-            watchlisted: row.get(23)?,
-            metadata_refreshed_at: row.get(24)?,
+            favorite: row.get(21)?,
+            watchlisted: row.get(22)?,
+            metadata_refreshed_at: row.get(23)?,
         })
     }
 }
@@ -849,7 +840,6 @@ fn film_from_raw(raw: RawFilmRow) -> Result<FilmMetadata, Error> {
             .as_deref()
             .map(serde_json::from_str)
             .transpose()?,
-        tags: serde_json::from_str(&raw.tags)?,
         favorite: raw.favorite != 0,
         watchlisted: raw.watchlisted != 0,
         metadata_refreshed_at: raw
@@ -860,7 +850,7 @@ fn film_from_raw(raw: RawFilmRow) -> Result<FilmMetadata, Error> {
     })
 }
 
-/// Bind the film columns (plus `created_at`) as `?1..=?26`.
+/// Bind the film columns (plus `created_at`) as `?1..=?25`.
 fn film_params(
     film: &FilmMetadata,
     created_at: &str,
@@ -922,7 +912,6 @@ fn film_params(
         serde_json::to_string(&film.cast)?.into(),
         optional_json(&certifications).map_or(rusqlite::types::Value::Null, Into::into),
         optional_json(&collection).map_or(rusqlite::types::Value::Null, Into::into),
-        serde_json::to_string(&film.tags)?.into(),
         i64::from(film.favorite).into(),
         i64::from(film.watchlisted).into(),
         film.metadata_refreshed_at
@@ -942,7 +931,7 @@ fn insert_film_row(
     let sql = format!(
         "INSERT {} INTO films ({FILM_COLUMNS}, created_at) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, \
-                 ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
+                 ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
         if ignore { "OR IGNORE" } else { "" }
     );
     let values = film_params(film, created_at)?;
@@ -955,7 +944,7 @@ fn upsert_film_row(conn: &Connection, film: &FilmMetadata) -> Result<usize, Erro
     let sql = format!(
         "INSERT INTO films ({FILM_COLUMNS}, created_at) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, \
-                 ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26) \
+                 ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25) \
          ON CONFLICT(film_id) DO UPDATE SET \
              tmdb_id = excluded.tmdb_id, \
              imdb_id = excluded.imdb_id, \

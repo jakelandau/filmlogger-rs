@@ -627,8 +627,7 @@ pub struct CollectionRef {
 /// A film's stored metadata plus the user's own film-level state.
 ///
 /// TMDB-sourced columns are refreshed by [`crate::FilmLogger::refresh_film`];
-/// `tags`, `favorite`, and `watchlisted` are owned by the user and survive a
-/// refresh.
+/// `favorite` and `watchlisted` are owned by the user and survive a refresh.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FilmMetadata {
     /// Canonical film identifier.
@@ -673,8 +672,6 @@ pub struct FilmMetadata {
     pub certifications: Option<Certifications>,
     /// The collection the film belongs to, if any.
     pub collection: Option<CollectionRef>,
-    /// User tags, normalized and capped (see [`Self::normalize_tags`]).
-    pub tags: Vec<String>,
     /// Whether the user marked the film a favorite.
     pub favorite: bool,
     /// Whether the user put the film on their watchlist.
@@ -713,7 +710,6 @@ impl FilmMetadata {
             cast: movie.cast.clone(),
             certifications: movie.certifications.clone(),
             collection: movie.collection.clone(),
-            tags: Vec::new(),
             favorite: false,
             watchlisted: false,
             metadata_refreshed_at: Some(Utc::now()),
@@ -746,34 +742,10 @@ impl FilmMetadata {
             cast: Vec::new(),
             certifications: log.certifications.clone(),
             collection: None,
-            tags: Vec::new(),
             favorite: false,
             watchlisted: false,
             metadata_refreshed_at: None,
         }
-    }
-
-    /// Normalize user tags: trim, drop empties, truncate to 32 characters,
-    /// deduplicate case-insensitively (keeping the first spelling), and cap
-    /// at 20 entries.
-    #[must_use]
-    pub fn normalize_tags(tags: impl IntoIterator<Item = String>) -> Vec<String> {
-        let mut seen = std::collections::HashSet::new();
-        let mut out = Vec::new();
-        for tag in tags {
-            let tag = tag.trim();
-            if tag.is_empty() {
-                continue;
-            }
-            let tag: String = tag.chars().take(32).collect();
-            if seen.insert(tag.to_lowercase()) {
-                out.push(tag);
-                if out.len() == 20 {
-                    break;
-                }
-            }
-        }
-        out
     }
 }
 

@@ -550,20 +550,6 @@ select {
   font-weight: 600;
 }
 
-.film-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.tag {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: #2f2b34;
-  color: #b6afc0;
-}
-
 /* Film page */
 .film-page {
   display: flex;
@@ -618,13 +604,6 @@ select {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
-}
-
-.tag-editor {
-  display: flex;
-  gap: 8px;
-  flex: 1;
-  min-width: 220px;
 }
 
 .film-stats .dim {

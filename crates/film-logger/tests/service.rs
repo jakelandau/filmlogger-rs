@@ -238,19 +238,12 @@ fn refresh_film_preserves_user_state() {
         .unwrap();
     let film_id = FilmId::Imdb("tt0137523".into());
     logger.set_favorite(&film_id, true).unwrap();
-    logger
-        .set_tags(&film_id, vec!["noir".into(), "  classic  ".into()])
-        .unwrap();
 
     // A second server reports a new title.
     let changed = start_tmdb("Fight Club (Remastered)");
     let refreshed = logger_at(&db, &changed).refresh_film(&film_id).unwrap();
     assert_eq!(refreshed.title, "Fight Club (Remastered)");
     assert!(refreshed.favorite);
-    assert_eq!(
-        refreshed.tags,
-        vec!["noir".to_owned(), "classic".to_owned()]
-    );
     assert!(refreshed.metadata_refreshed_at.is_some());
 }
 

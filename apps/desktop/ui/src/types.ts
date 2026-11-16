@@ -171,7 +171,6 @@ export interface FilmMetadata {
   cast: CastMember[];
   certifications: Certifications | null;
   collection: CollectionRef | null;
-  tags: string[];
   favorite: boolean;
   watchlisted: boolean;
   metadata_refreshed_at: string | null;

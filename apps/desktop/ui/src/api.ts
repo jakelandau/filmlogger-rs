@@ -48,7 +48,5 @@ export const api = {
   getFilmPage: (filmId: string) => invoke<FilmPage>("get_film_page", { filmId }),
   setFavorite: (filmId: string, favorite: boolean) =>
     invoke<FilmMetadata>("set_favorite", { filmId, favorite }),
-  setTags: (filmId: string, tags: string[]) =>
-    invoke<FilmMetadata>("set_tags", { filmId, tags }),
   formatCatalog: () => invoke<FormatCatalog>("format_catalog"),
 };

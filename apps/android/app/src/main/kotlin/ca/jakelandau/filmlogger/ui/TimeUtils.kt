@@ -67,6 +67,17 @@ object TimeUtils {
     fun toLocalInput(iso: String, zone: ZoneId = systemZone()): String =
         parse(iso, zone)?.toLocalDateTime()?.format(localFormatter) ?: ""
 
+    /** Parse the `yyyy-MM-dd HH:mm` edit string, or null when invalid. */
+    fun parseLocalInput(value: String): LocalDateTime? =
+        try {
+            LocalDateTime.parse(value, localFormatter)
+        } catch (_: Exception) {
+            null
+        }
+
+    /** Format a local date-time as the `yyyy-MM-dd HH:mm` edit string. */
+    fun formatLocalInput(value: LocalDateTime): String = value.format(localFormatter)
+
     /** A `zone` wall time back to an RFC 3339 instant. Empty on a DST gap. */
     fun fromLocalInput(value: String, zone: ZoneId = systemZone()): String =
         try {

@@ -1,5 +1,7 @@
 package ca.jakelandau.filmlogger.ui
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,8 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.Instant
+import java.time.LocalDateTime
 import uniffi.film_logger_ffi.Format
 import uniffi.film_logger_ffi.FormatCatalog
 import uniffi.film_logger_ffi.Rating
@@ -92,17 +97,24 @@ fun ViewingFields(
     rating: Rating?,
     onRating: (Rating) -> Unit,
 ) {
-    Text("Time zone", style = MaterialTheme.typography.titleSmall)
+    Text(
+        "Time Zone",
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.titleSmall,
+    )
     Spacer(Modifier.height(6.dp))
     TimezonePicker(timezone, onTimezone)
     Spacer(Modifier.height(12.dp))
 
+    Text("Watched at", style = MaterialTheme.typography.titleSmall)
+    Spacer(Modifier.height(6.dp))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(
+        DateTimePickerButton(
             value = watchedAtInput,
-            onValueChange = onWatchedAt,
+            timezone = timezone,
             modifier = Modifier.weight(1f),
-            label = { Text("Watched (yyyy-MM-dd HH:mm)") },
+            onChange = onWatchedAt,
         )
         Spacer(Modifier.width(10.dp))
         OutlinedButton(
@@ -120,12 +132,64 @@ fun ViewingFields(
     }
     Spacer(Modifier.height(12.dp))
 
-    Text("Rating", style = MaterialTheme.typography.titleSmall)
+    Text(
+        "Rating",
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center,
+        style = MaterialTheme.typography.titleSmall,
+    )
     Spacer(Modifier.height(4.dp))
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         RadioChoice(rating == Rating.UP, { onRating(Rating.UP) }, "👍 Up")
         Spacer(Modifier.width(20.dp))
         RadioChoice(rating == Rating.DOWN, { onRating(Rating.DOWN) }, "👎 Down")
+    }
+}
+
+@Composable
+private fun DateTimePickerButton(
+    value: String,
+    timezone: String,
+    modifier: Modifier = Modifier,
+    onChange: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val zone = TimeUtils.zone(timezone)
+    val start = TimeUtils.parseLocalInput(value) ?: LocalDateTime.now(zone)
+    OutlinedButton(
+        onClick = {
+            DatePickerDialog(
+                context,
+                { _, year, month, day ->
+                    TimePickerDialog(
+                        context,
+                        { _, hour, minute ->
+                            onChange(
+                                TimeUtils.formatLocalInput(
+                                    LocalDateTime.of(year, month + 1, day, hour, minute),
+                                )
+                            )
+                        },
+                        start.hour,
+                        start.minute,
+                        android.text.format.DateFormat.is24HourFormat(context),
+                    ).show()
+                },
+                start.year,
+                start.monthValue - 1,
+                start.dayOfMonth,
+            ).show()
+        },
+        modifier = modifier,
+    ) {
+        Text(
+            value.ifEmpty { "Select date and time" },
+            style = MaterialTheme.typography.bodyLarge,
+        )
     }
 }
 

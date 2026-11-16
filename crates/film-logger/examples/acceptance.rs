@@ -6,8 +6,8 @@
 //! cargo run --example acceptance
 //! ```
 
-use film_logger::{FilmLogger, RatingBoard, TmdbClient, Venue, WatchLog};
 use film_logger::domain::{Dci, Format, HomeMedium, Projection, ScreenClass};
+use film_logger::{FilmLogger, NewLogDetails, TmdbClient, Venue, WatchLog};
 use serde_json::{Value, from_str};
 use tokio::runtime::Builder;
 use wiremock::matchers::path;
@@ -28,16 +28,20 @@ const MOVIE_JSON: &str = r#"{
     "vote_average": 8.433,
     "vote_count": 26279,
     "popularity": 73.433,
-    "adult": false
-}"#;
-
-const RELEASE_DATES_JSON: &str = r#"{
-    "id": 550,
-    "results": [
-        { "iso_3166_1": "US", "certification": "R" },
-        { "iso_3166_1": "GB", "certification": "15" },
-        { "iso_3166_1": "DE", "certification": "FSK 16" }
-    ]
+    "adult": false,
+    "credits": {
+        "cast": [
+            { "id": 287, "name": "Brad Pitt", "character": "Tyler Durden", "order": 0 }
+        ]
+    },
+    "release_dates": {
+        "results": [
+            { "iso_3166_1": "US", "release_dates": [ { "certification": "R" } ] },
+            { "iso_3166_1": "GB", "release_dates": [ { "certification": "15" } ] },
+            { "iso_3166_1": "DE", "release_dates": [ { "certification": "FSK 16" } ] }
+        ]
+    },
+    "belongs_to_collection": null
 }"#;
 
 fn value(json: &str) -> Value {
@@ -50,10 +54,6 @@ fn start_tmdb() -> MockServer {
         let server = MockServer::builder().start().await;
         Mock::given(path("/movie/550"))
             .respond_with(ResponseTemplate::new(200).set_body_json(value(MOVIE_JSON)))
-            .mount(&server)
-            .await;
-        Mock::given(path("/movie/550/release_dates"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(value(RELEASE_DATES_JSON)))
             .mount(&server)
             .await;
         server
@@ -74,22 +74,24 @@ fn main() {
         .add_film(
             550,
             Venue::Theatre,
-            Some(Format::Theatre {
+            Format::Theatre {
                 projection: Projection::Dci(Dci::Laser4K),
                 screen: ScreenClass::Plf,
                 three_d: false,
                 hfr: false,
                 dbox: false,
-            }),
+            },
+            &NewLogDetails::default(),
         )
         .unwrap();
     let second = logger
         .add_film(
             550,
             Venue::Home,
-            Some(Format::Home {
+            Format::Home {
                 medium: HomeMedium::BluRay,
-            }),
+            },
+            &NewLogDetails::default(),
         )
         .unwrap();
     assert_eq!(first.watch_count, Some(1));
@@ -110,7 +112,7 @@ fn main() {
     println!("added: A Home Film (direct)");
 
     let original_list = logger.list().unwrap();
-    logger.set_selected_board(RatingBoard::Fsk).unwrap();
+    logger.set_selected_board("DE").unwrap();
     logger.export_to(&exported).unwrap();
     println!("exported to {}", exported.display());
 
@@ -123,10 +125,7 @@ fn main() {
     let listed = reopened.list().unwrap();
     assert_eq!(listed, original_list);
     assert_eq!(listed.len(), 3);
-    assert_eq!(
-        reopened.settings().unwrap().selected_board,
-        RatingBoard::Fsk
-    );
+    assert_eq!(reopened.settings().unwrap().selected_board, "DE");
     let stats = reopened.stats().unwrap();
     assert_eq!(stats.total_viewings, 3);
     assert_eq!(stats.distinct_films, 2);

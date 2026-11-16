@@ -23,15 +23,13 @@ pub enum Rating {
     Down,
 }
 
-/// The board whose certification is shown as a film's content rating.
-#[derive(uniffi::Enum, Clone, Copy, PartialEq, Eq, Debug)]
-pub enum RatingBoard {
-    /// The US MPAA rating board.
-    Mpa,
-    /// The British Board of Film Classification.
-    Bbfc,
-    /// The German FSK board.
-    Fsk,
+/// One rating board TMDB reports certifications for.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct RatingBoard {
+    /// The TMDB region key, e.g. `"US"`.
+    pub region: String,
+    /// The board's display name.
+    pub name: String,
 }
 
 /// A canonical film identifier: an IMDB id, or a TMDB numeric id when the
@@ -166,22 +164,27 @@ pub enum HomeMedium {
     Custom { id: String },
 }
 
-/// A film's board certifications, by supported board.
+/// One region's certification.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct Certification {
+    /// The TMDB region key, e.g. `"US"`.
+    pub region: String,
+    /// The board's certification, e.g. `"R"`.
+    pub rating: String,
+}
+
+/// A film's board certifications.
 #[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
 pub struct Certifications {
-    /// The US (MPAA) certification, e.g. `"R"`.
-    pub us: Option<String>,
-    /// The UK (BBFC) certification, e.g. `"15"`.
-    pub gb: Option<String>,
-    /// The German (FSK) certification, e.g. `"FSK 16"`.
-    pub de: Option<String>,
+    /// Every known region certification, ordered by region.
+    pub values: Vec<Certification>,
 }
 
 /// User preferences, persisted with the log.
 #[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
 pub struct Settings {
-    /// The board whose certification the list view shows.
-    pub selected_board: RatingBoard,
+    /// The region code of the board the list view shows.
+    pub selected_board: String,
 }
 
 /// A TMDB genre.
@@ -232,6 +235,10 @@ pub struct Movie {
     pub adult: bool,
     /// The board certifications, if fetched.
     pub certifications: Option<Certifications>,
+    /// The top-billed cast.
+    pub cast: Vec<CastMember>,
+    /// The collection the film belongs to, if any.
+    pub collection: Option<CollectionRef>,
 }
 
 /// A lightweight movie record (search result).
@@ -301,6 +308,8 @@ pub struct WatchLog {
     pub venue: Venue,
     /// The instant the film was watched, in UTC (RFC 3339).
     pub watched_at: String,
+    /// The IANA time zone the viewing time was entered in, if known.
+    pub timezone: Option<String>,
     /// Free-form notes.
     pub notes: Option<String>,
     /// Your thumbs-up/thumbs-down rating, if given.
@@ -311,6 +320,8 @@ pub struct WatchLog {
     pub watch_count: Option<i32>,
     /// How it was viewed, if known.
     pub format: Option<Format>,
+    /// One-line display summary of `format`, maintained by the store.
+    pub format_summary: String,
 }
 
 /// Aggregated statistics over all stored watch logs.
@@ -324,6 +335,16 @@ pub struct Stats {
     pub viewings_by_venue: VenueCounts,
     /// Viewings by UTC calendar year, ascending.
     pub viewings_by_year: Vec<YearCount>,
+    /// Viewings by UTC calendar month (`YYYY-MM`), ascending.
+    pub viewings_by_month: Vec<CountEntry>,
+    /// Viewings by projection family: `dci`, `imax`, `film`, or `home`.
+    pub viewings_by_projection_family: Vec<CountEntry>,
+    /// Viewings by auditorium class.
+    pub viewings_by_screen: Vec<CountEntry>,
+    /// Home viewings by release medium.
+    pub viewings_by_medium: Vec<CountEntry>,
+    /// Viewings per presentation flag: `three_d`, `hfr`, or `dbox`.
+    pub viewings_by_flag: Vec<CountEntry>,
     /// Viewings flagged as a rewatch.
     pub rewatches: u32,
     /// Top films by viewing count, descending (title as tie-break).
@@ -357,6 +378,196 @@ pub struct FilmViewings {
     pub count: u32,
 }
 
+/// One credited cast member of a film.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct CastMember {
+    /// The TMDB person id.
+    pub id: i64,
+    /// The actor's name.
+    pub name: String,
+    /// The character played, if known.
+    pub character: Option<String>,
+    /// The billing order (0 is top-billed).
+    pub order: i32,
+}
+
+/// A reference to the collection (franchise) a film belongs to.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct CollectionRef {
+    /// The TMDB collection id.
+    pub id: i64,
+    /// The collection name.
+    pub name: String,
+    /// The collection poster path, if known.
+    pub poster_path: Option<String>,
+}
+
+/// A film's stored metadata plus the user's own film-level state.
+#[derive(uniffi::Record, Clone, PartialEq, Debug)]
+pub struct FilmMetadata {
+    /// Canonical film identifier.
+    pub film_id: FilmId,
+    /// The TMDB numeric id, if known.
+    pub tmdb_id: Option<i64>,
+    /// The IMDB id, if known.
+    pub imdb_id: Option<String>,
+    /// The title.
+    pub title: String,
+    /// The original title.
+    pub original_title: Option<String>,
+    /// The release date (`YYYY-MM-DD`), if known.
+    pub release_date: Option<String>,
+    /// The release year, if known.
+    pub release_year: Option<i32>,
+    /// The runtime in minutes, if known.
+    pub runtime_minutes: Option<i32>,
+    /// A short overview.
+    pub overview: Option<String>,
+    /// The tagline, if known.
+    pub tagline: Option<String>,
+    /// The original language (ISO 639-1), if known.
+    pub original_language: Option<String>,
+    /// The poster path, if known.
+    pub poster_path: Option<String>,
+    /// The backdrop path, if known.
+    pub backdrop_path: Option<String>,
+    /// The average vote, if known.
+    pub vote_average: Option<f64>,
+    /// The vote count, if known.
+    pub vote_count: Option<i64>,
+    /// The popularity score, if known.
+    pub popularity: Option<f64>,
+    /// Whether the film is marked adult.
+    pub adult: bool,
+    /// The genres.
+    pub genres: Vec<Genre>,
+    /// The top-billed cast.
+    pub cast: Vec<CastMember>,
+    /// The board certifications, if fetched.
+    pub certifications: Option<Certifications>,
+    /// The collection the film belongs to, if any.
+    pub collection: Option<CollectionRef>,
+    /// User tags.
+    pub tags: Vec<String>,
+    /// Whether the user marked the film a favorite.
+    pub favorite: bool,
+    /// Whether the user put the film on their watchlist.
+    pub watchlisted: bool,
+    /// When the metadata was last refreshed (RFC 3339).
+    pub metadata_refreshed_at: Option<String>,
+}
+
+/// One film in the library list, with its viewing summary.
+#[derive(uniffi::Record, Clone, PartialEq, Debug)]
+pub struct FilmListEntry {
+    /// The film metadata.
+    pub film: FilmMetadata,
+    /// Number of stored viewings.
+    pub viewings: u32,
+    /// The most recent viewing instant (RFC 3339), if any.
+    pub last_watched_at: Option<String>,
+}
+
+/// The viewing statistics for a single film.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct FilmStats {
+    /// Number of viewings.
+    pub viewings: u32,
+    /// Theatrical viewings.
+    pub theatre: u32,
+    /// Home viewings.
+    pub home: u32,
+    /// The first viewing instant (RFC 3339), if any.
+    pub first_watched_at: Option<String>,
+    /// The most recent viewing instant (RFC 3339), if any.
+    pub last_watched_at: Option<String>,
+    /// Viewings per format summary.
+    pub formats: Vec<CountEntry>,
+}
+
+/// A film's page: metadata, viewing history, and statistics.
+#[derive(uniffi::Record, Clone, PartialEq, Debug)]
+pub struct FilmPage {
+    /// The film metadata.
+    pub film: FilmMetadata,
+    /// The film's viewings, most recent first.
+    pub logs: Vec<WatchLog>,
+    /// Viewing statistics.
+    pub stats: FilmStats,
+}
+
+/// The user-supplied details of a new viewing.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug, Default)]
+pub struct NewLogDetails {
+    /// When the film was watched (RFC 3339); defaults to now.
+    pub watched_at: Option<String>,
+    /// The IANA time zone the viewing time was entered in, if known.
+    pub timezone: Option<String>,
+    /// Free-form notes.
+    pub notes: Option<String>,
+    /// A thumbs-up/thumbs-down rating.
+    pub rating: Option<Rating>,
+}
+
+/// A `(key, count)` pair, for a breakdown map.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct CountEntry {
+    /// The entry's key.
+    pub key: String,
+    /// The entry's count.
+    pub count: u32,
+}
+
+/// A selectable catalog entry: a stable key and its display label.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct FormatOption {
+    /// The key used in a serialized [`Format`].
+    pub key: String,
+    /// The human-readable label.
+    pub label: String,
+}
+
+/// A named group of catalog options (a family's technologies or screens).
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct FormatGroup {
+    /// The group key (the family key).
+    pub key: String,
+    /// The group's options.
+    pub options: Vec<FormatOption>,
+}
+
+/// One legal projection × technology × auditorium combination.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct FormatLegality {
+    /// The projection family: `dci`, `imax`, or `film`.
+    pub family: String,
+    /// The technology key.
+    pub technology: String,
+    /// The auditorium key.
+    pub screen: String,
+    /// The flags this combination may carry.
+    pub allowed_flags: Vec<String>,
+    /// The flags this combination must carry.
+    pub forced_flags: Vec<String>,
+}
+
+/// The viewing-format catalog both apps render.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct FormatCatalog {
+    /// The projection families, in display order.
+    pub families: Vec<FormatOption>,
+    /// The technologies per family.
+    pub technologies: Vec<FormatGroup>,
+    /// The auditoria legal for each family.
+    pub screens: Vec<FormatGroup>,
+    /// The home release mediums.
+    pub mediums: Vec<FormatOption>,
+    /// The presentation flags.
+    pub flag_labels: Vec<FormatOption>,
+    /// Every legal projection × technology × auditorium combination.
+    pub legal: Vec<FormatLegality>,
+}
+
 /// An error from the logger.
 #[derive(uniffi::Error, Clone, Debug)]
 pub enum LoggerError {
@@ -388,6 +599,14 @@ pub enum LoggerError {
     FlagMismatch { detail: String },
     /// A watch log's `watch_count` is below one.
     InvalidWatchCount { count: i32 },
+    /// An import file was rejected.
+    InvalidImport { detail: String },
+    /// The film has no TMDB id, so it cannot be refreshed.
+    NoTmdbId { film_id: FilmId },
+    /// A film id string could not be parsed.
+    InvalidFilmId { value: String },
+    /// A stored log document is corrupt or unreadable.
+    InvalidStoredLog { id: i64 },
 }
 
 impl std::fmt::Display for LoggerError {
@@ -417,6 +636,10 @@ impl std::fmt::Display for LoggerError {
             Self::InvalidWatchCount { count } => {
                 write!(f, "watch count {count} is less than 1")
             }
+            Self::InvalidImport { detail } => write!(f, "import rejected: {detail}"),
+            Self::NoTmdbId { film_id } => write!(f, "film {film_id:?} has no TMDB id"),
+            Self::InvalidFilmId { value } => write!(f, "invalid film id: {value}"),
+            Self::InvalidStoredLog { id } => write!(f, "stored log {id} is corrupt"),
         }
     }
 }

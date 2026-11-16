@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::domain::{Flag, Projection, ScreenClass, Venue};
+use crate::domain::{FilmId, Flag, Format, Projection, ScreenClass, Venue};
 
 /// Crate-wide error.
 #[derive(Error, Debug)]
@@ -61,12 +61,12 @@ pub enum Error {
     },
 
     /// A viewing format was attached to a log whose venue it does not match.
-    #[error("viewing format does not match venue")]
+    #[error("viewing format {format:?} does not match venue {venue:?}")]
     VenueFormatMismatch {
         /// The venue of the log.
         venue: Venue,
-        /// The serialized viewing format that did not match.
-        format: String,
+        /// The viewing format that did not match.
+        format: Format,
     },
 
     /// A theatre format's projection cannot be screened in its auditorium class.
@@ -95,5 +95,33 @@ pub enum Error {
     InvalidWatchCount {
         /// The offending watch count.
         count: i32,
+    },
+
+    /// A film id string could not be parsed.
+    #[error("invalid film id: {value}")]
+    InvalidFilmId {
+        /// The offending key.
+        value: String,
+    },
+
+    /// A stored log document is corrupt or unreadable.
+    #[error("stored log {id} is corrupt")]
+    InvalidStoredLog {
+        /// The row id of the corrupt document.
+        id: i64,
+    },
+
+    /// An import file was rejected.
+    #[error("import rejected: {detail}")]
+    InvalidImport {
+        /// Why the file was rejected.
+        detail: String,
+    },
+
+    /// The film has no TMDB id, so it cannot be refreshed.
+    #[error("film {film_id:?} has no TMDB id")]
+    NoTmdbId {
+        /// The film's canonical id.
+        film_id: FilmId,
     },
 }

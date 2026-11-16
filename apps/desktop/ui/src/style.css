@@ -28,6 +28,9 @@ body {
   max-width: 860px;
   margin: 0 auto;
   padding: 0 16px 48px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .nav {
@@ -67,6 +70,15 @@ body {
 
 .content {
   padding-top: 16px;
+  flex: 1;
+}
+
+/* The confirm and data-entry steps render a single card: centre it in the
+   window rather than top-justifying it. */
+.content:has(> .selected-card) {
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
 }
 
 .dim {
@@ -142,6 +154,18 @@ h3 {
   background: transparent;
   border: 1px dashed var(--border);
   color: var(--muted);
+}
+
+.cert-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  vertical-align: -3px;
+  margin-right: 2px;
+}
+
+.certifications .cert-icon {
+  margin-left: 2px;
 }
 
 .row-actions {
@@ -302,7 +326,7 @@ input[type="text"] {
 .details-row {
   display: flex;
   gap: 16px;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 .details-row .details-form {
@@ -310,9 +334,14 @@ input[type="text"] {
   min-width: 0;
 }
 
+/* The picked film's title and release year are the form's headline. */
+.details-form h3 {
+  font-size: 22px;
+}
+
 .poster.details {
   width: 92px;
-  height: 138px;
+  height: auto;
   flex: none;
 }
 
@@ -359,15 +388,6 @@ input[type="text"] {
   border: 1px solid var(--border);
   border-radius: 6px;
   width: 160px;
-}
-
-textarea.notes {
-  font: inherit;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  width: 100%;
-  resize: vertical;
 }
 
 .actions {
@@ -429,6 +449,9 @@ textarea.notes {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 /* Misc */
@@ -443,4 +466,232 @@ textarea.notes {
 
 .empty {
   color: var(--muted);
+}
+
+/* Filter bars: logs and the film library share the compact row. */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.filter-bar .search {
+  flex: 1;
+  min-width: 180px;
+}
+
+select {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--fg);
+}
+
+/* Toggle chips (library filters, format counts). */
+.chip {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chip.active {
+  border-color: var(--burgundy);
+  color: var(--burgundy-fg);
+  background: rgba(128, 0, 32, 0.25);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.chip:not(button) {
+  cursor: default;
+}
+
+/* Film library */
+.film-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.film-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.film-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.film-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.film-title {
+  font-weight: 600;
+}
+
+.film-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #2f2b34;
+  color: #b6afc0;
+}
+
+/* Film page */
+.film-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.film-meta {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.poster.film-poster {
+  width: 154px;
+  height: 231px;
+}
+
+.film-meta-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.film-meta-text h2 {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+
+.film-meta-text .back {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--accent);
+  margin-right: 4px;
+}
+
+.tagline {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.overview {
+  line-height: 1.45;
+}
+
+.cast {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.film-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-editor {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.film-stats .dim {
+  font-size: 13px;
+}
+
+/* Stats breakdown bars */
+.breakdown {
+  margin-top: 8px;
+}
+
+.breakdown-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.breakdown-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 42px;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.breakdown-label {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breakdown-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar-track {
+  display: block;
+  height: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--burgundy);
+}
+
+.load-more {
+  margin-top: 8px;
+}
+
+.credits {
+  margin: 4px 0 12px;
+  padding-left: 20px;
+  color: var(--muted);
+}
+
+.credits li {
+  margin: 3px 0;
+}
+
+.credits strong {
+  color: var(--fg);
+  font-weight: 600;
 }

@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.jakelandau.filmlogger"
+    namespace = "ca.jakelandau.filmlogger"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.jakelandau.filmlogger"
+        applicationId = "ca.jakelandau.filmlogger"
         minSdk = 26
         targetSdk = 37
         versionCode = 1
@@ -67,7 +67,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core")
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-svg:2.7.0")
     // Uniffi's Kotlin bindings use JNA for the FFI layer. The AAR (not the
     // jar) packages `libjnidispatch.so` into the APK so JNA's
     // `System.loadLibrary("jnidispatch")` can find it on Android.
@@ -93,10 +95,13 @@ val generatedKotlinDir: File = file("src/main/kotlin")
 val generatedJniLibs: File = file("build/generated/jniLibs")
 val cargoBin: String = providers
     .gradleProperty("cargoBin")
-    .orElse("C:/Users/jakel/.cargo/bin/cargo.exe")
+    .orElse(providers.environmentVariable("CARGO"))
+    .orElse("cargo")
     .get()
 val ndkRoot: String = providers
     .gradleProperty("ndkRoot")
+    .orElse(providers.environmentVariable("ANDROID_NDK_HOME"))
+    .orElse(providers.environmentVariable("ANDROID_NDK_LATEST_HOME"))
     .orElse("C:/Users/jakel/AppData/Local/Android/Sdk/ndk/30.0.15729638")
     .get()
 // The TMDB Read Access Token, baked into the Rust cdylib at compile time
@@ -111,9 +116,11 @@ val tmdbApiKey: String = providers
 
 // cargo-ndk is resolved as a cargo subcommand on PATH, so the cargo bin dir
 // (the parent of `cargo`) is prepended to the Exec tasks' PATH.
-val cargoBinDir: File = File(cargoBin).parentFile
-val pathWithCargo: String =
-    (System.getenv("PATH") ?: "") + ";" + cargoBinDir.absolutePath
+val cargoBinDir: File? = File(cargoBin).parentFile
+val pathWithCargo: String = listOfNotNull(
+    System.getenv("PATH"),
+    cargoBinDir?.takeIf { it.exists() }?.absolutePath,
+).joinToString(File.pathSeparator)
 
 val buildHostCdylib = tasks.register<Exec>("buildHostCdylib") {
     workingDir = rustDir

@@ -5,6 +5,8 @@
 //! with an optional viewing [`Format`]. Films are identified by IMDB ID when
 //! known, falling back to the TMDB numeric ID.
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -33,15 +35,42 @@ pub enum FilmId {
     Tmdb(i64),
 }
 
+impl FilmId {
+    /// The canonical storage/display key: `"tt0137523"` or `"tmdb:550"`.
+    #[must_use]
+    pub fn key(&self) -> String {
+        match self {
+            FilmId::Imdb(s) => s.clone(),
+            FilmId::Tmdb(n) => format!("tmdb:{n}"),
+        }
+    }
+
+    /// Parse a key produced by [`Self::key`].
+    ///
+    /// Only the `tmdb:` prefix is strict: `tmdb:abc` is invalid. Every other
+    /// string is an IMDB id.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidFilmId`] for a malformed `tmdb:` key.
+    pub fn from_key(key: &str) -> Result<Self, Error> {
+        if let Some(n) = key.strip_prefix("tmdb:") {
+            let parsed = n.parse::<i64>().map_err(|_| Error::InvalidFilmId {
+                value: key.to_owned(),
+            })?;
+            Ok(FilmId::Tmdb(parsed))
+        } else {
+            Ok(FilmId::Imdb(key.to_owned()))
+        }
+    }
+}
+
 impl Serialize for FilmId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        match self {
-            FilmId::Imdb(s) => serializer.serialize_str(s),
-            FilmId::Tmdb(n) => serializer.serialize_str(&format!("tmdb:{n}")),
-        }
+        serializer.serialize_str(&self.key())
     }
 }
 
@@ -51,14 +80,7 @@ impl<'de> Deserialize<'de> for FilmId {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        if let Some(n) = s.strip_prefix("tmdb:") {
-            let parsed = n
-                .parse::<i64>()
-                .map_err(|_| serde::de::Error::custom(format!("unknown FilmId: {s}")))?;
-            Ok(FilmId::Tmdb(parsed))
-        } else {
-            Ok(FilmId::Imdb(s))
-        }
+        FilmId::from_key(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -395,80 +417,443 @@ pub enum Rating {
     Down,
 }
 
-/// The board whose certification is shown as a film's content rating.
+/// One rating board TMDB reports certifications for.
 ///
-/// Distinct from [`Rating`] (a thumbs up/down of a viewing): a board
-/// certifies a *film* (e.g. `R`, `15`, `FSK 16`). Each board maps to the ISO
-/// 3166-1 region of the country that runs it.
-#[non_exhaustive]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum RatingBoard {
-    /// The US MPAA rating board.
-    Mpa,
-    /// The British Board of Film Classification.
-    Bbfc,
-    /// The German FSK (Freiwillige Selbstkontrolle der Filmwirtschaft).
-    Fsk,
+/// A board is keyed by the ISO 3166-1 region code TMDB uses (`"US"`,
+/// `"GB"`, `"CA-QC"`), with a human-readable name. Distinct from [`Rating`]
+/// (a thumbs up/down of a viewing): a board certifies a *film* (e.g. `R`,
+/// `15`, `FSK 16`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RatingBoard {
+    /// The TMDB region key, e.g. `"US"`.
+    pub region: String,
+    /// The board's display name, e.g. `"United States (MPA)"`.
+    pub name: String,
 }
 
 impl RatingBoard {
-    /// The ISO 3166-1 alpha-2 region code of the country this board runs.
-    #[must_use]
-    pub const fn iso_region(&self) -> &'static str {
-        match self {
-            RatingBoard::Mpa => "US",
-            RatingBoard::Bbfc => "GB",
-            RatingBoard::Fsk => "DE",
+    fn new(region: &str, name: &str) -> Self {
+        Self {
+            region: region.to_owned(),
+            name: name.to_owned(),
         }
     }
 }
 
-/// A film's board certifications, by supported board.
-///
-/// A `None` slot means the board's certification is unknown for the film.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Certifications {
-    /// The US (MPAA) certification, e.g. `"R"`.
-    pub us: Option<String>,
-    /// The UK (BBFC) certification, e.g. `"15"`.
-    pub gb: Option<String>,
-    /// The German (FSK) certification, e.g. `"FSK 16"`.
-    pub de: Option<String>,
+/// Every movie certification board TMDB's `/certification/movie/list`
+/// endpoint reports.
+const RATING_BOARDS: &[(&str, &str)] = &[
+    ("AR", "Argentina"),
+    ("AT", "Austria"),
+    ("AU", "Australia (ACB)"),
+    ("BE", "Belgium"),
+    ("BG", "Bulgaria"),
+    ("BR", "Brazil (ClassInd)"),
+    ("CA", "Canada"),
+    ("CA-QC", "Canada (Quebec)"),
+    ("CH", "Switzerland"),
+    ("CL", "Chile"),
+    ("CZ", "Czechia"),
+    ("DE", "Germany (FSK)"),
+    ("DK", "Denmark"),
+    ("ES", "Spain"),
+    ("FI", "Finland"),
+    ("FR", "France (CNC)"),
+    ("GB", "United Kingdom (BBFC)"),
+    ("GR", "Greece"),
+    ("HK", "Hong Kong"),
+    ("HU", "Hungary"),
+    ("ID", "Indonesia"),
+    ("IE", "Ireland"),
+    ("IL", "Israel"),
+    ("IN", "India (CBFC)"),
+    ("IT", "Italy"),
+    ("JP", "Japan (Eirin)"),
+    ("KR", "South Korea"),
+    ("LT", "Lithuania"),
+    ("LU", "Luxembourg"),
+    ("LV", "Latvia"),
+    ("MO", "Macau"),
+    ("MX", "Mexico"),
+    ("MY", "Malaysia"),
+    ("NL", "Netherlands"),
+    ("NO", "Norway"),
+    ("NZ", "New Zealand"),
+    ("PH", "Philippines"),
+    ("PL", "Poland"),
+    ("PR", "Puerto Rico"),
+    ("PT", "Portugal"),
+    ("RO", "Romania"),
+    ("RU", "Russia"),
+    ("SE", "Sweden"),
+    ("SG", "Singapore"),
+    ("SK", "Slovakia"),
+    ("TH", "Thailand"),
+    ("TR", "Turkey"),
+    ("TW", "Taiwan"),
+    ("UA", "Ukraine"),
+    ("US", "United States (MPA)"),
+    ("VI", "US Virgin Islands"),
+    ("ZA", "South Africa"),
+];
+
+/// All movie certification boards TMDB supports, ordered by region code.
+#[must_use]
+pub fn rating_boards() -> Vec<RatingBoard> {
+    RATING_BOARDS
+        .iter()
+        .map(|(region, name)| RatingBoard::new(region, name))
+        .collect()
 }
 
+/// Look up a board by region code (case-insensitive).
+#[must_use]
+pub fn rating_board(region: &str) -> Option<RatingBoard> {
+    let region = normalize_board_key(region);
+    RATING_BOARDS
+        .iter()
+        .find(|(code, _)| code.eq_ignore_ascii_case(&region))
+        .map(|(code, name)| RatingBoard::new(code, name))
+}
+
+/// A film's board certifications, keyed by TMDB region code.
+///
+/// Unknown regions are simply absent. The legacy `{ us, gb, de }` shape is
+/// accepted when deserializing older exports and logs.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct Certifications(BTreeMap<String, String>);
+
 impl Certifications {
-    /// The certification for `board`, if known.
+    /// Build a certification map, normalizing keys to uppercase region codes
+    /// and dropping blank ratings.
     #[must_use]
-    pub fn certification_for(&self, board: &RatingBoard) -> Option<&str> {
-        match board {
-            RatingBoard::Mpa => self.us.as_deref(),
-            RatingBoard::Bbfc => self.gb.as_deref(),
-            RatingBoard::Fsk => self.de.as_deref(),
+    pub fn new(values: impl IntoIterator<Item = (String, String)>) -> Self {
+        let mut certifications = Self::default();
+        for (region, rating) in values {
+            certifications.insert(region, rating);
         }
+        certifications
+    }
+
+    /// Set one region's certification.
+    pub fn insert(&mut self, region: impl AsRef<str>, rating: impl AsRef<str>) {
+        let region = normalize_board_key(region.as_ref());
+        let rating = rating.as_ref().trim();
+        if !region.is_empty() && !rating.is_empty() {
+            self.0.insert(region, rating.to_owned());
+        }
+    }
+
+    /// The certification for `region`, if known.
+    #[must_use]
+    pub fn get(&self, region: &str) -> Option<&str> {
+        self.0.get(&normalize_board_key(region)).map(String::as_str)
+    }
+
+    /// Iterate `(region, rating)` pairs in region order.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.0
+            .iter()
+            .map(|(region, rating)| (region.as_str(), rating.as_str()))
     }
 
     /// True when no board has a certification.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.us.is_none() && self.gb.is_none() && self.de.is_none()
+        self.0.is_empty()
     }
+}
+
+impl<'de> Deserialize<'de> for Certifications {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw: BTreeMap<String, Option<String>> = BTreeMap::deserialize(deserializer)?;
+        let mut certifications = Self::default();
+        for (region, rating) in raw {
+            if let Some(rating) = rating {
+                certifications.insert(region, rating);
+            }
+        }
+        Ok(certifications)
+    }
+}
+
+/// Normalize a board/region key, including the three legacy enum names.
+fn normalize_board_key(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "mpa" => "US".to_owned(),
+        "bbfc" => "GB".to_owned(),
+        "fsk" => "DE".to_owned(),
+        _ => value.trim().to_ascii_uppercase(),
+    }
+}
+
+/// A genre associated with a film.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Genre {
+    /// The TMDB genre id.
+    pub id: i32,
+    /// The genre name.
+    pub name: String,
+}
+
+/// One credited cast member of a film.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CastMember {
+    /// The TMDB person id.
+    pub id: i64,
+    /// The actor's name.
+    pub name: String,
+    /// The character played, if known.
+    pub character: Option<String>,
+    /// The billing order (0 is top-billed).
+    pub order: i32,
+}
+
+/// A reference to the collection (franchise) a film belongs to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CollectionRef {
+    /// The TMDB collection id.
+    pub id: i64,
+    /// The collection name.
+    pub name: String,
+    /// The collection poster path, if known.
+    pub poster_path: Option<String>,
+}
+
+/// A film's stored metadata plus the user's own film-level state.
+///
+/// TMDB-sourced columns are refreshed by [`crate::FilmLogger::refresh_film`];
+/// `tags`, `favorite`, and `watchlisted` are owned by the user and survive a
+/// refresh.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FilmMetadata {
+    /// Canonical film identifier.
+    pub film_id: FilmId,
+    /// The TMDB numeric id, if known.
+    pub tmdb_id: Option<i64>,
+    /// The IMDB id, if known.
+    pub imdb_id: Option<String>,
+    /// The title.
+    pub title: String,
+    /// The original title.
+    pub original_title: Option<String>,
+    /// The release date (`YYYY-MM-DD`), if known.
+    pub release_date: Option<String>,
+    /// The release year, if known.
+    pub release_year: Option<i32>,
+    /// The runtime in minutes, if known.
+    pub runtime_minutes: Option<i32>,
+    /// A short overview.
+    pub overview: Option<String>,
+    /// The tagline, if known.
+    pub tagline: Option<String>,
+    /// The original language (ISO 639-1), if known.
+    pub original_language: Option<String>,
+    /// The poster path, if known.
+    pub poster_path: Option<String>,
+    /// The backdrop path, if known.
+    pub backdrop_path: Option<String>,
+    /// The average vote, if known.
+    pub vote_average: Option<f64>,
+    /// The vote count, if known.
+    pub vote_count: Option<i64>,
+    /// The popularity score, if known.
+    pub popularity: Option<f64>,
+    /// Whether the film is marked adult.
+    pub adult: bool,
+    /// The genres.
+    pub genres: Vec<Genre>,
+    /// The top-billed cast.
+    pub cast: Vec<CastMember>,
+    /// The board certifications, if fetched.
+    pub certifications: Option<Certifications>,
+    /// The collection the film belongs to, if any.
+    pub collection: Option<CollectionRef>,
+    /// User tags, normalized and capped (see [`Self::normalize_tags`]).
+    pub tags: Vec<String>,
+    /// Whether the user marked the film a favorite.
+    pub favorite: bool,
+    /// Whether the user put the film on their watchlist.
+    pub watchlisted: bool,
+    /// When the TMDB-sourced metadata was last refreshed.
+    pub metadata_refreshed_at: Option<DateTime<Utc>>,
+}
+
+impl FilmMetadata {
+    /// Build the metadata for a resolved TMDB movie.
+    #[must_use]
+    pub fn from_movie(movie: &Movie) -> Self {
+        let film_id = match &movie.imdb_id {
+            Some(imdb) => FilmId::Imdb(imdb.clone()),
+            None => FilmId::Tmdb(movie.id),
+        };
+        Self {
+            film_id,
+            tmdb_id: Some(movie.id),
+            imdb_id: movie.imdb_id.clone(),
+            title: movie.title.clone(),
+            original_title: Some(movie.original_title.clone()),
+            release_date: movie.release_date.clone(),
+            release_year: movie.release_year(),
+            runtime_minutes: movie.runtime,
+            overview: Some(movie.overview.clone()),
+            tagline: movie.tagline.clone(),
+            original_language: Some(movie.original_language.clone()),
+            poster_path: movie.poster_path.clone(),
+            backdrop_path: movie.backdrop_path.clone(),
+            vote_average: Some(movie.vote_average),
+            vote_count: Some(movie.vote_count),
+            popularity: Some(movie.popularity),
+            adult: movie.adult,
+            genres: movie.genres.clone(),
+            cast: movie.cast.clone(),
+            certifications: movie.certifications.clone(),
+            collection: movie.collection.clone(),
+            tags: Vec::new(),
+            favorite: false,
+            watchlisted: false,
+            metadata_refreshed_at: Some(Utc::now()),
+        }
+    }
+
+    /// A minimal metadata row for a legacy direct-store insert, built from a
+    /// log's denormalized fields.
+    #[must_use]
+    pub fn from_log(log: &WatchLog) -> Self {
+        Self {
+            film_id: log.film_id.clone(),
+            tmdb_id: log.tmdb_id,
+            imdb_id: log.imdb_id.clone(),
+            title: log.title.clone(),
+            original_title: None,
+            release_date: None,
+            release_year: log.release_year,
+            runtime_minutes: None,
+            overview: None,
+            tagline: None,
+            original_language: None,
+            poster_path: log.poster_path.clone(),
+            backdrop_path: None,
+            vote_average: None,
+            vote_count: None,
+            popularity: None,
+            adult: false,
+            genres: Vec::new(),
+            cast: Vec::new(),
+            certifications: log.certifications.clone(),
+            collection: None,
+            tags: Vec::new(),
+            favorite: false,
+            watchlisted: false,
+            metadata_refreshed_at: None,
+        }
+    }
+
+    /// Normalize user tags: trim, drop empties, truncate to 32 characters,
+    /// deduplicate case-insensitively (keeping the first spelling), and cap
+    /// at 20 entries.
+    #[must_use]
+    pub fn normalize_tags(tags: impl IntoIterator<Item = String>) -> Vec<String> {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for tag in tags {
+            let tag = tag.trim();
+            if tag.is_empty() {
+                continue;
+            }
+            let tag: String = tag.chars().take(32).collect();
+            if seen.insert(tag.to_lowercase()) {
+                out.push(tag);
+                if out.len() == 20 {
+                    break;
+                }
+            }
+        }
+        out
+    }
+}
+
+/// One film in the library list, with its viewing summary.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FilmListEntry {
+    /// The film metadata.
+    pub film: FilmMetadata,
+    /// Number of stored viewings.
+    pub viewings: usize,
+    /// The most recent viewing instant, if any.
+    pub last_watched_at: Option<DateTime<Utc>>,
+}
+
+/// The viewing statistics for a single film.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct FilmStats {
+    /// Number of viewings.
+    pub viewings: usize,
+    /// Theatrical viewings.
+    pub theatre: usize,
+    /// Home viewings.
+    pub home: usize,
+    /// The first viewing instant, if any.
+    pub first_watched_at: Option<DateTime<Utc>>,
+    /// The most recent viewing instant, if any.
+    pub last_watched_at: Option<DateTime<Utc>>,
+    /// Viewings per format summary.
+    pub formats: BTreeMap<String, usize>,
+}
+
+/// A film's page: metadata, its viewing history, and its statistics.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FilmPage {
+    /// The film metadata.
+    pub film: FilmMetadata,
+    /// The film's viewings, most recent first.
+    pub logs: Vec<WatchLog>,
+    /// Viewing statistics.
+    pub stats: FilmStats,
+}
+
+/// The user-supplied details of a new viewing.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NewLogDetails {
+    /// When the film was watched; defaults to now.
+    pub watched_at: Option<DateTime<Utc>>,
+    /// The IANA time zone the time was entered in, if known.
+    pub timezone: Option<String>,
+    /// Free-form notes.
+    pub notes: Option<String>,
+    /// A thumbs-up/thumbs-down rating.
+    pub rating: Option<Rating>,
 }
 
 /// User preferences, persisted with the log (in the same database).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
-    /// The board whose certification the list view shows.
-    pub selected_board: RatingBoard,
+    /// The region code of the board whose certification the list view shows.
+    #[serde(deserialize_with = "deserialize_selected_board")]
+    pub selected_board: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            selected_board: RatingBoard::Mpa,
+            selected_board: "US".to_owned(),
         }
     }
+}
+
+/// Accept both region codes and the legacy `mpa`/`bbfc`/`fsk` names.
+fn deserialize_selected_board<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    Ok(normalize_board_key(&value))
 }
 
 /// One viewing of a film.
@@ -496,21 +881,28 @@ pub struct WatchLog {
     pub venue: Venue,
     /// The instant the film was watched, in UTC.
     pub watched_at: DateTime<Utc>,
+    /// The IANA time zone the viewing time was entered in, if known.
+    #[serde(default)]
+    pub timezone: Option<String>,
     /// Free-form notes.
     pub notes: Option<String>,
     /// Your thumbs-up/thumbs-down rating, if given.
     #[serde(default)]
     pub rating: Option<Rating>,
-    /// Whether this is a rewatch of a film logged previously. Set by the
-    /// store on insert.
+    /// Whether this is a rewatch of a film logged previously. A read-only
+    /// projection maintained by the store: true when this viewing is not the
+    /// film's first, in chronological order (`watched_at`, then row id).
     #[serde(default)]
     pub rewatch: bool,
     /// How many times this film has been logged, including this viewing.
-    /// `None` until the store counts prior appearances on insert.
+    /// A read-only projection maintained by the store.
     #[serde(default)]
     pub watch_count: Option<i32>,
     /// How it was viewed. Required on validation: see [`Self::validate`].
     pub format: Option<Format>,
+    /// One-line display summary of `format`, maintained by the store.
+    #[serde(default)]
+    pub format_summary: String,
 }
 
 impl WatchLog {
@@ -534,11 +926,13 @@ impl WatchLog {
             certifications: None,
             venue,
             watched_at: local.with_timezone(&Utc),
+            timezone: None,
             notes: None,
             rating: None,
             rewatch: false,
             watch_count: None,
             format: None,
+            format_summary: String::new(),
         }
     }
 
@@ -569,11 +963,13 @@ impl WatchLog {
             certifications: movie.certifications.clone(),
             venue,
             watched_at: local.with_timezone(&Utc),
+            timezone: None,
             notes: None,
             rating: None,
             rewatch: false,
             watch_count: None,
             format: None,
+            format_summary: String::new(),
         }
     }
 
@@ -583,17 +979,53 @@ impl WatchLog {
         Self::from_movie(movie, venue, Local::now())
     }
 
+    /// Create a log of a stored film with a known viewing format.
+    ///
+    /// The film's denormalized columns (`imdb_id`, `tmdb_id`, `title`,
+    /// `release_year`, `poster_path`, `certifications`) are copied from
+    /// `film`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::VenueFormatMismatch`] if `format.venue() != venue`, or
+    /// a validation error if the format is internally inconsistent.
+    pub fn from_film(
+        film: &FilmMetadata,
+        venue: Venue,
+        format: Format,
+        local: DateTime<Local>,
+    ) -> Result<Self, Error> {
+        let mut log = Self::new(film.film_id.clone(), &film.title, venue, local);
+        log.imdb_id.clone_from(&film.imdb_id);
+        log.tmdb_id = film.tmdb_id;
+        log.release_year = film.release_year;
+        log.poster_path.clone_from(&film.poster_path);
+        log.certifications.clone_from(&film.certifications);
+        log.attach_format(venue, format)?;
+        Ok(log)
+    }
+
+    /// Set the derived display fields from the current `format`.
+    pub fn set_derived(&mut self) {
+        self.format_summary = self
+            .format
+            .as_ref()
+            .map_or_else(String::new, Format::summary);
+    }
+
+    /// Validate `format` for `venue` and attach it.
+    fn attach_format(&mut self, venue: Venue, format: Format) -> Result<(), Error> {
+        let format = check_format(venue, format)?;
+        self.format = Some(format);
+        Ok(())
+    }
+
     /// Create a log with a known viewing format.
     ///
     /// # Errors
     ///
     /// Returns [`Error::VenueFormatMismatch`] if `format.venue() != venue`, or a
     /// validation error if the format is internally inconsistent.
-    ///
-    /// # Panics
-    ///
-    /// Panics if [`Format`] cannot be serialized to JSON, which should not
-    /// occur for a valid format.
     pub fn with_format(
         film_id: FilmId,
         title: impl Into<String>,
@@ -601,25 +1033,14 @@ impl WatchLog {
         format: Format,
         local: DateTime<Local>,
     ) -> Result<Self, Error> {
-        if format.venue() != venue {
-            return Err(Error::VenueFormatMismatch {
-                venue,
-                format: serde_json::to_string(&format).unwrap(),
-            });
-        }
-        format.validate()?;
         let mut log = Self::new(film_id, title, venue, local);
-        log.format = Some(format);
+        log.attach_format(venue, format)?;
         Ok(log)
     }
 
     /// Convenience: [`Self::with_format`] with [`Local::now`].
     ///
     /// # Errors
-    ///
-    /// As [`Self::with_format`].
-    ///
-    /// # Panics
     ///
     /// As [`Self::with_format`].
     pub fn with_format_now(
@@ -637,36 +1058,20 @@ impl WatchLog {
     ///
     /// Returns [`Error::VenueFormatMismatch`] if `format.venue() != venue`, or a
     /// validation error if the format is internally inconsistent.
-    ///
-    /// # Panics
-    ///
-    /// Panics if [`Format`] cannot be serialized to JSON, which should not
-    /// occur for a valid format.
     pub fn from_movie_with_format(
         movie: &Movie,
         venue: Venue,
         format: Format,
         local: DateTime<Local>,
     ) -> Result<Self, Error> {
-        if format.venue() != venue {
-            return Err(Error::VenueFormatMismatch {
-                venue,
-                format: serde_json::to_string(&format).unwrap(),
-            });
-        }
-        format.validate()?;
         let mut log = Self::from_movie(movie, venue, local);
-        log.format = Some(format);
+        log.attach_format(venue, format)?;
         Ok(log)
     }
 
     /// Convenience: [`Self::from_movie_with_format`] with [`Local::now`].
     ///
     /// # Errors
-    ///
-    /// As [`Self::from_movie_with_format`].
-    ///
-    /// # Panics
     ///
     /// As [`Self::from_movie_with_format`].
     pub fn from_movie_with_format_now(
@@ -703,11 +1108,6 @@ impl WatchLog {
     /// [`Error::MissingFormat`] if no format is attached,
     /// [`Error::VenueFormatMismatch`] if the format does not match the venue,
     /// or a format validation error if the format is internally inconsistent.
-    ///
-    /// # Panics
-    ///
-    /// Panics if [`Self::format`] cannot be serialized to JSON, which should
-    /// not occur for a valid format.
     #[must_use = "a watch log must be validated before persistence"]
     pub fn validate(&self) -> Result<(), Error> {
         if let Some(n) = self.watch_count {
@@ -715,24 +1115,28 @@ impl WatchLog {
                 return Err(Error::InvalidWatchCount { count: n });
             }
         }
-        let Some(format) = &self.format else {
+        let Some(format) = self.format.clone() else {
             return Err(Error::MissingFormat { venue: self.venue });
         };
-        if format.venue() != self.venue {
-            return Err(Error::VenueFormatMismatch {
-                venue: self.venue,
-                format: serde_json::to_string(format).unwrap(),
-            });
-        }
-        format.validate()
+        check_format(self.venue, format)?;
+        Ok(())
     }
+}
+
+/// Validate a format against a venue and return it.
+fn check_format(venue: Venue, format: Format) -> Result<Format, Error> {
+    if format.venue() != venue {
+        return Err(Error::VenueFormatMismatch { venue, format });
+    }
+    format.validate()?;
+    Ok(format)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         Certifications, Dci, Film, FilmId, Flag, Format, HomeMedium, Imax, Projection, Rating,
-        RatingBoard, ScreenClass, Settings, Venue, WatchLog,
+        ScreenClass, Settings, Venue, WatchLog,
     };
     use crate::error::Error;
     use crate::tmdb::Movie;
@@ -758,6 +1162,8 @@ mod tests {
             popularity: 73.433,
             adult: false,
             certifications: None,
+            cast: vec![],
+            collection: None,
         }
     }
 
@@ -909,10 +1315,7 @@ mod tests {
             "Fight Club",
             Venue::Theatre,
         );
-        assert!(matches!(
-            log.validate(),
-            Err(Error::MissingFormat { .. })
-        ));
+        assert!(matches!(log.validate(), Err(Error::MissingFormat { .. })));
     }
 
     #[test]
@@ -1165,45 +1568,54 @@ mod tests {
     }
 
     #[test]
-    fn rating_board_iso_region() {
-        assert_eq!(RatingBoard::Mpa.iso_region(), "US");
-        assert_eq!(RatingBoard::Bbfc.iso_region(), "GB");
-        assert_eq!(RatingBoard::Fsk.iso_region(), "DE");
+    fn rating_boards_cover_tmdb_regions() {
+        let boards = super::rating_boards();
+        assert_eq!(boards.len(), 52);
+        assert_eq!(
+            super::rating_board("mpa").map(|board| board.region),
+            Some("US".into())
+        );
+        assert_eq!(
+            super::rating_board("ca-qc").map(|board| board.name),
+            Some("Canada (Quebec)".into())
+        );
     }
 
     #[test]
     fn certification_lookup_and_roundtrip() {
-        let certifications = Certifications {
-            us: Some("R".into()),
-            gb: Some("15".into()),
-            de: Some("FSK 16".into()),
-        };
-        assert_eq!(
-            certifications.certification_for(&RatingBoard::Mpa),
-            Some("R")
-        );
-        assert_eq!(
-            certifications.certification_for(&RatingBoard::Bbfc),
-            Some("15")
-        );
-        assert_eq!(
-            certifications.certification_for(&RatingBoard::Fsk),
-            Some("FSK 16")
-        );
+        let mut certifications = Certifications::default();
+        certifications.insert("us", "R");
+        certifications.insert("gb", "15");
+        certifications.insert("de", "FSK 16");
+        certifications.insert("jp", "R12+");
+        assert_eq!(certifications.get("US"), Some("R"));
+        assert_eq!(certifications.get("GB"), Some("15"));
+        assert_eq!(certifications.get("DE"), Some("FSK 16"));
+        assert_eq!(certifications.get("JP"), Some("R12+"));
 
         let json = serde_json::to_string(&certifications).unwrap();
         let parsed: Certifications = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, certifications);
+
+        // Legacy exports stored the three original fields by name.
+        let legacy: Certifications =
+            serde_json::from_str(r#"{"us":"R","gb":"15","de":null}"#).unwrap();
+        assert_eq!(legacy.get("US"), Some("R"));
+        assert_eq!(legacy.get("GB"), Some("15"));
+        assert_eq!(legacy.get("DE"), None);
     }
 
     #[test]
     fn settings_default_and_serde_default() {
-        assert_eq!(Settings::default().selected_board, RatingBoard::Mpa);
+        assert_eq!(Settings::default().selected_board, "US");
         // A document without the field (an older log) deserializes to the default.
         let parsed: Settings = serde_json::from_str("{}").unwrap();
         assert_eq!(parsed, Settings::default());
+        // Legacy board names map to region codes.
+        let legacy: Settings = serde_json::from_str(r#"{"selected_board":"fsk"}"#).unwrap();
+        assert_eq!(legacy.selected_board, "DE");
         let settings = Settings {
-            selected_board: RatingBoard::Fsk,
+            selected_board: "GB".to_owned(),
         };
         let json = serde_json::to_string(&settings).unwrap();
         let parsed: Settings = serde_json::from_str(&json).unwrap();

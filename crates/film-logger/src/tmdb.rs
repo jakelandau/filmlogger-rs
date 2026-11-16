@@ -1,23 +1,21 @@
 //! TMDB API client and models.
 //!
-//! The client wraps [`tmdb_client`], an OpenAPI-generated client for the
-//! TMDB v3 REST API, and re-exposes this crate's own models ([`Movie`],
-//! [`MovieSummary`], [`SearchPage`]) as the public API. It fetches a full
-//! movie by TMDB id, finds a movie by IMDB id, and searches movies. The
-//! TMDB API Key is sent as the `?api_key=` query parameter on every request.
-//! Images are referenced by path; the full image URLs are built by
-//! [`Movie::poster_url`] and [`Movie::backdrop_url`].
+//! A direct, blocking [`reqwest`] client for the TMDB v3 REST API. It fetches
+//! a full movie by TMDB id (with credits and release dates appended), finds a
+//! movie by IMDB id, searches movies, and lists the popular ones. Images are
+//! referenced by path; the full image URLs are built by [`Movie::poster_url`]
+//! and [`Movie::backdrop_url`].
+//!
+//! Authentication follows the key's shape: a v4 **API Read Access Token** (a
+//! JWT, starting with `eyJ`) is sent as `Authorization: Bearer`, anything else
+//! as the `?api_key=` query parameter.
 
-use std::rc::Rc;
+use std::time::Duration;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use tmdb_client::apis::configuration::Configuration;
-use tmdb_client::apis::{
-    FindApi, FindApiClient, MoviesApi, MoviesApiClient, SearchApi, SearchApiClient,
-};
-use tmdb_client::models::{MovieDetails, MovieObject, MoviePaginated};
 
-use crate::domain::Certifications;
+use crate::domain::{CastMember, Certifications, CollectionRef, Genre};
 use crate::error::Error;
 
 /// Base URL of the live TMDB API.
@@ -34,15 +32,6 @@ const IMAGE_BASE_URL: &str = "https://image.tmdb.org/t/p";
 /// `option_env!`, so a running process never reads the environment. `None`
 /// when the key was absent at build time.
 pub static COMPILED_API_KEY: Option<&'static str> = option_env!("TMDB_API_KEY");
-
-/// A genre associated with a film.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Genre {
-    /// The TMDB genre id.
-    pub id: i32,
-    /// The genre name.
-    pub name: String,
-}
 
 /// A full movie record (TMDB movie detail / find result).
 #[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
@@ -84,6 +73,10 @@ pub struct Movie {
     pub adult: bool,
     /// The board certifications, if fetched from the film's release dates.
     pub certifications: Option<Certifications>,
+    /// The top-billed cast (up to ten).
+    pub cast: Vec<CastMember>,
+    /// The collection the film belongs to, if any.
+    pub collection: Option<CollectionRef>,
 }
 
 impl Movie {
@@ -166,43 +159,36 @@ pub struct SearchPage {
     pub total_results: i32,
 }
 
-/// The TMDB API client.
-///
-/// Wraps the generated [`tmdb_client`], re-exposing this crate's models and
-/// error type. The underlying client is blocking (the generated client is
-/// synchronous), so the methods here are synchronous.
-pub struct TmdbClient {
-    find: FindApiClient,
-    movies: MoviesApiClient,
-    search: SearchApiClient,
-    /// The API key, for requests this crate makes directly (release dates).
-    api_key: String,
-    /// The base URL, for requests this crate makes directly.
-    base_url: String,
-    /// A direct blocking HTTP client, sharing the generated client's TLS.
-    raw: reqwest::blocking::Client,
+/// How requests authenticate: a v4 bearer token or a v3 API key.
+enum Auth {
+    /// A v3 key, sent as `?api_key=`.
+    ApiKey(String),
+    /// A v4 Read Access Token, sent as `Authorization: Bearer`.
+    Bearer(String),
 }
 
-/// The generated [`tmdb_client`] `*ApiClient`s hold their configuration in an
-/// [`Rc`], which is not [`Send`]. The configuration is written once in
-/// [`TmdbClient::make`] and only read afterwards, and the shared
-/// `reqwest::blocking::Client` is itself `Send` + `Sync`, so sharing a
-/// [`TmdbClient`] across threads is safe.
-#[allow(unsafe_code)]
-unsafe impl Send for TmdbClient {}
-#[allow(unsafe_code)]
-unsafe impl Sync for TmdbClient {}
+/// The TMDB API client.
+///
+/// Blocking (synchronous): the apps call it from a worker thread. The struct
+/// is naturally `Send + Sync`, so it can be shared behind a mutex.
+pub struct TmdbClient {
+    http: reqwest::blocking::Client,
+    base_url: String,
+    auth: Auth,
+}
 
 impl TmdbClient {
     /// Create a client for the live TMDB API.
     ///
-    /// `api_key` is the TMDB v3 **API Key**, sent as the `?api_key=` query
-    /// parameter on every request.
+    /// `api_key` may be either a v3 API key or a v4 Read Access Token; the
+    /// shape of the string selects the authentication scheme.
+    #[must_use]
     pub fn new(api_key: impl Into<String>) -> Self {
         Self::make(api_key, TMDB_BASE_URL)
     }
 
     /// Create a client against a custom base URL (for tests).
+    #[must_use]
     pub fn with_base_url(api_key: impl Into<String>, base_url: impl Into<String>) -> Self {
         Self::make(api_key, base_url)
     }
@@ -219,37 +205,72 @@ impl TmdbClient {
 
     fn make(api_key: impl Into<String>, base_url: impl Into<String>) -> Self {
         let api_key = api_key.into();
-        let base_url = base_url.into();
-        let config = Rc::new({
-            let mut config = Configuration::new_with_api_key(api_key.clone());
-            config.base_path.clone_from(&base_url);
-            config
-        });
+        let auth = if api_key.starts_with("eyJ") {
+            Auth::Bearer(api_key)
+        } else {
+            Auth::ApiKey(api_key)
+        };
+        let http = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .user_agent(concat!("FilmLogger/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .unwrap_or_else(|_| reqwest::blocking::Client::new());
         Self {
-            find: FindApiClient::new(Rc::clone(&config)),
-            movies: MoviesApiClient::new(Rc::clone(&config)),
-            search: SearchApiClient::new(Rc::clone(&config)),
-            api_key,
-            base_url,
-            raw: config.client.clone(),
+            http,
+            base_url: base_url.into(),
+            auth,
         }
     }
 
-    /// Get a full movie by its TMDB numeric id.
+    /// Send a `GET` request and deserialize the JSON body.
+    fn get<T: DeserializeOwned>(&self, path: &str, query: &[(&str, String)]) -> Result<T, Error> {
+        let mut request = self
+            .http
+            .get(format!("{}{path}", self.base_url))
+            .query(query);
+        request = match &self.auth {
+            Auth::ApiKey(key) => request.query(&[("api_key", key.as_str())]),
+            Auth::Bearer(token) => request.bearer_auth(token),
+        };
+        let response = request.send().map_err(Error::Http)?;
+        let status = response.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Err(Error::FilmNotFound);
+        }
+        let bytes = response.bytes().map_err(Error::Http)?;
+        if !status.is_success() {
+            let message = serde_json::from_slice::<ApiErrorBody>(&bytes)
+                .ok()
+                .and_then(|body| body.status_message)
+                .filter(|m| !m.is_empty())
+                .or_else(|| status.canonical_reason().map(str::to_owned))
+                .unwrap_or_else(|| format!("HTTP {status}"));
+            return Err(Error::Api {
+                status: status.as_u16(),
+                message,
+            });
+        }
+        Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    /// Get a full movie by its TMDB numeric id, including credits and board
+    /// certifications.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Api`] on an HTTP error status (e.g. 404 not found),
-    /// [`Error::Serde`] if the response body is not valid JSON, or
-    /// [`Error::Http`] on connection, timeout, or other transport errors.
+    /// Returns [`Error::FilmNotFound`] on a 404, [`Error::Api`] on another
+    /// HTTP error status, [`Error::Serde`] if the response body is not valid
+    /// JSON, or [`Error::Http`] on connection, timeout, or other transport
+    /// errors.
     pub fn movie(&self, id: i64) -> Result<Movie, Error> {
-        let details = self
-            .movies
-            .get_movie_details(Self::tmdb_id(id), Some("en"), None, None)
-            .map_err(Self::from_tmdb_error)?;
-        let mut movie: Movie = details.into();
-        movie.certifications = self.release_certifications(id);
-        Ok(movie)
+        let response: MovieResponse = self.get(
+            &format!("/movie/{id}"),
+            &[
+                ("language", "en".to_owned()),
+                ("append_to_response", "credits,release_dates".to_owned()),
+            ],
+        )?;
+        Ok(response.into_movie())
     }
 
     /// Find a movie by its IMDB id (e.g. `tt0137523`).
@@ -261,16 +282,19 @@ impl TmdbClient {
     /// response body is not valid JSON, or [`Error::Http`] on connection,
     /// timeout, or other transport errors.
     pub fn find_by_imdb_id(&self, imdb_id: &str) -> Result<Movie, Error> {
-        let find = self
-            .find
-            .get_find_external_id(imdb_id, "imdb_id", Some("en"))
-            .map_err(Self::from_tmdb_error)?;
-        let first = find
+        let find: FindResponse = self.get(
+            &format!("/find/{imdb_id}"),
+            &[
+                ("external_source", "imdb_id".to_owned()),
+                ("language", "en".to_owned()),
+            ],
+        )?;
+        let id = find
             .movie_results
-            .and_then(|results| results.into_iter().next())
+            .first()
+            .map(|m| m.id)
             .ok_or(Error::FilmNotFound)?;
-        let id = first.id.ok_or(Error::FilmNotFound)?;
-        self.movie(i64::from(id))
+        self.movie(id)
     }
 
     /// Search movies by query.
@@ -281,11 +305,16 @@ impl TmdbClient {
     /// the response body is not valid JSON, or [`Error::Http`] on connection,
     /// timeout, or other transport errors.
     pub fn search_movies(&self, query: &str, page: i32) -> Result<SearchPage, Error> {
-        let page = self
-            .search
-            .get_search_movie_paginated(query, None, None, Some("en"), Some(page), None, None)
-            .map_err(Self::from_tmdb_error)?;
-        Ok(page.into())
+        let response: SearchResponse = self.get(
+            "/search/movie",
+            &[
+                ("query", query.to_owned()),
+                ("language", "en".to_owned()),
+                ("page", page.to_string()),
+                ("include_adult", "false".to_owned()),
+            ],
+        )?;
+        Ok(response.into_page())
     }
 
     /// The currently popular movies.
@@ -293,84 +322,207 @@ impl TmdbClient {
     /// # Errors
     ///
     /// Returns [`Error::Api`] on an HTTP error status, [`Error::Serde`] if
-    /// the response body is not valid JSON, or [`Error::Http`] on
-    /// connection, timeout, or other transport errors.
+    /// the response body is not valid JSON, or [`Error::Http`] on connection,
+    /// timeout, or other transport errors.
     pub fn popular_movies(&self, page: i32) -> Result<SearchPage, Error> {
-        let page = self
-            .movies
-            .get_movie_popular_paginated(Some("en"), Some(page), None)
-            .map_err(Self::from_tmdb_error)?;
-        Ok(page.into())
+        let response: SearchResponse = self.get(
+            "/movie/popular",
+            &[("language", "en".to_owned()), ("page", page.to_string())],
+        )?;
+        Ok(response.into_page())
     }
+}
 
-    /// Fetch the film's board certifications from its release dates.
-    ///
-    /// TMDB's release-dates response carries per-region `certification`
-    /// fields, which the generated models do not model; this direct request
-    /// parses only those. A `None` (rather than `Err`) keeps [`Self::movie`]
-    /// resilient when the endpoint is missing for a film.
-    fn release_certifications(&self, id: i64) -> Option<Certifications> {
-        let url = format!(
-            "{}/movie/{id}/release_dates",
-            self.base_url,
-            id = Self::tmdb_id(id)
-        );
-        let response: ReleaseDatesResponse = self
-            .raw
-            .get(url)
-            .query(&[("language", "en"), ("api_key", self.api_key.as_str())])
-            .send()
-            .ok()?
-            .error_for_status()
-            .ok()?
-            .json()
-            .ok()?;
-        Some(response.certifications())
-    }
+/// TMDB's error body.
+#[derive(Debug, Deserialize)]
+struct ApiErrorBody {
+    #[serde(default)]
+    status_message: Option<String>,
+}
 
-    /// A TMDB numeric id as an `i32` (ids fit far below `i32::MAX`).
-    #[allow(clippy::cast_possible_truncation)]
-    fn tmdb_id(id: i64) -> i32 {
-        id as i32
-    }
+/// TMDB's movie-detail response (with appended `credits` and `release_dates`).
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct MovieResponse {
+    id: Option<i64>,
+    title: Option<String>,
+    original_title: Option<String>,
+    original_language: Option<String>,
+    release_date: Option<String>,
+    runtime: Option<i32>,
+    genres: Vec<GenreResponse>,
+    overview: Option<String>,
+    tagline: Option<String>,
+    status: Option<String>,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
+    vote_average: Option<f64>,
+    vote_count: Option<i64>,
+    imdb_id: Option<String>,
+    popularity: Option<f64>,
+    adult: Option<bool>,
+    credits: Option<CreditsResponse>,
+    release_dates: Option<ReleaseDatesResponse>,
+    belongs_to_collection: Option<CollectionResponse>,
+}
 
-    /// Map a [`tmdb_client::Error`] onto this crate's [`Error`].
-    fn from_tmdb_error(err: tmdb_client::Error) -> Error {
-        match err {
-            tmdb_client::Error::Reqwest(re) => match re.status() {
-                Some(status) => Error::Api {
-                    status: status.as_u16(),
-                    message: re.to_string(),
-                },
-                None => Error::Http(re),
-            },
-            tmdb_client::Error::Serde(s) => Error::Serde(s),
-            tmdb_client::Error::Io(i) => Error::Io(i),
+impl MovieResponse {
+    /// Convert into this crate's [`Movie`], keeping the top ten cast members.
+    fn into_movie(self) -> Movie {
+        let cast = self
+            .credits
+            .map(|credits| {
+                credits
+                    .cast
+                    .into_iter()
+                    .take(10)
+                    .map(CastResponse::into_member)
+                    .collect()
+            })
+            .unwrap_or_default();
+        Movie {
+            id: self.id.unwrap_or(0),
+            title: self.title.unwrap_or_default(),
+            original_title: self.original_title.unwrap_or_default(),
+            original_language: self.original_language.unwrap_or_default(),
+            release_date: self.release_date,
+            runtime: self.runtime,
+            genres: self
+                .genres
+                .into_iter()
+                .map(GenreResponse::into_genre)
+                .collect(),
+            overview: self.overview.unwrap_or_default(),
+            tagline: self.tagline,
+            status: self.status.unwrap_or_default(),
+            poster_path: self.poster_path,
+            backdrop_path: self.backdrop_path,
+            vote_average: self.vote_average.unwrap_or(0.0),
+            vote_count: self.vote_count.unwrap_or(0),
+            imdb_id: self.imdb_id,
+            popularity: self.popularity.unwrap_or(0.0),
+            adult: self.adult.unwrap_or(false),
+            certifications: self.release_dates.map(|r| r.certifications()),
+            cast,
+            collection: self.belongs_to_collection.map(CollectionResponse::into_ref),
         }
     }
 }
 
-/// TMDB's release-dates response: per-region entries whose releases carry
-/// board certifications. Parsed directly because the generated models do
-/// not carry `certification`.
-#[derive(Debug, Deserialize)]
+/// TMDB's genre entry.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct GenreResponse {
+    id: i32,
+    name: String,
+}
+
+impl GenreResponse {
+    fn into_genre(self) -> Genre {
+        Genre {
+            id: self.id,
+            name: self.name,
+        }
+    }
+}
+
+/// TMDB's `credits` block.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct CreditsResponse {
+    cast: Vec<CastResponse>,
+}
+
+/// TMDB's cast entry.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct CastResponse {
+    id: i64,
+    name: String,
+    character: Option<String>,
+    order: i32,
+}
+
+impl CastResponse {
+    fn into_member(self) -> CastMember {
+        CastMember {
+            id: self.id,
+            name: self.name,
+            character: self.character,
+            order: self.order,
+        }
+    }
+}
+
+/// TMDB's collection entry.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct CollectionResponse {
+    id: i64,
+    name: String,
+    poster_path: Option<String>,
+}
+
+impl CollectionResponse {
+    fn into_ref(self) -> CollectionRef {
+        CollectionRef {
+            id: self.id,
+            name: self.name,
+            poster_path: self.poster_path,
+        }
+    }
+}
+
+/// TMDB's paginated search/popular response.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct SearchResponse {
+    page: i32,
+    results: Vec<MovieSummary>,
+    total_pages: i32,
+    total_results: i32,
+}
+
+impl SearchResponse {
+    fn into_page(self) -> SearchPage {
+        SearchPage {
+            page: self.page,
+            results: self.results,
+            total_pages: self.total_pages,
+            total_results: self.total_results,
+        }
+    }
+}
+
+/// TMDB's `find` response.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct FindResponse {
+    movie_results: Vec<FindMovie>,
+}
+
+/// One movie result of a `find` lookup.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct FindMovie {
+    id: i64,
+}
+
+/// TMDB's release-dates block: per-region entries whose releases carry board
+/// certifications.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
 struct ReleaseDatesResponse {
-    #[serde(default)]
     results: Vec<RegionRelease>,
 }
 
 impl ReleaseDatesResponse {
-    /// The supported-board certifications, from each region's first
-    /// non-blank certification.
+    /// Every region's first non-blank certification.
     fn certifications(&self) -> Certifications {
         let mut certifications = Certifications::default();
         for region in &self.results {
-            if region.iso_3166_1.eq_ignore_ascii_case("US") {
-                certifications.us = region.certification().map(String::from);
-            } else if region.iso_3166_1.eq_ignore_ascii_case("GB") {
-                certifications.gb = region.certification().map(String::from);
-            } else if region.iso_3166_1.eq_ignore_ascii_case("DE") {
-                certifications.de = region.certification().map(String::from);
+            if let Some(certification) = region.certification() {
+                certifications.insert(region.iso_3166_1.clone(), certification);
             }
         }
         certifications
@@ -404,89 +556,9 @@ struct ReleaseDate {
     certification: Option<String>,
 }
 
-/// TMDB's movie-detail record, converted to this crate's [`Movie`].
-impl From<MovieDetails> for Movie {
-    fn from(d: MovieDetails) -> Self {
-        Self {
-            id: i64::from(d.id.unwrap_or(0)),
-            title: d.title.unwrap_or_default(),
-            original_title: d.original_title.unwrap_or_default(),
-            original_language: d.original_language.unwrap_or_default(),
-            release_date: d.release_date,
-            runtime: d.runtime,
-            genres: d
-                .genres
-                .unwrap_or_default()
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            overview: d.overview.unwrap_or_default(),
-            tagline: d.tagline,
-            status: d.status.unwrap_or_default(),
-            poster_path: d.poster_path,
-            backdrop_path: d.backdrop_path,
-            vote_average: f64::from(d.vote_average.unwrap_or(0.0)),
-            vote_count: i64::from(d.vote_count.unwrap_or(0)),
-            imdb_id: d.imdb_id,
-            popularity: f64::from(d.popularity.unwrap_or(0.0)),
-            adult: d.adult.unwrap_or(false),
-            // Fetched separately in `TmdbClient::movie`.
-            certifications: None,
-        }
-    }
-}
-
-/// TMDB's search-result movie, converted to this crate's [`MovieSummary`].
-impl From<MovieObject> for MovieSummary {
-    fn from(o: MovieObject) -> Self {
-        Self {
-            id: i64::from(o.id.unwrap_or(0)),
-            title: o.title.unwrap_or_default(),
-            original_title: o.original_title.unwrap_or_default(),
-            original_language: o.original_language.unwrap_or_default(),
-            release_date: o.release_date,
-            overview: o.overview.unwrap_or_default(),
-            genre_ids: o.genre_ids.unwrap_or_default(),
-            poster_path: o.poster_path,
-            backdrop_path: o.backdrop_path,
-            vote_average: f64::from(o.vote_average.unwrap_or(0.0)),
-            vote_count: i64::from(o.vote_count.unwrap_or(0)),
-            popularity: f64::from(o.popularity.unwrap_or(0.0)),
-            adult: o.adult.unwrap_or(false),
-        }
-    }
-}
-
-/// TMDB's paginated search, converted to this crate's [`SearchPage`].
-impl From<MoviePaginated> for SearchPage {
-    fn from(p: MoviePaginated) -> Self {
-        Self {
-            page: p.page.unwrap_or(0),
-            results: p
-                .results
-                .unwrap_or_default()
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            total_pages: p.total_pages.unwrap_or(0),
-            total_results: p.total_results.unwrap_or(0),
-        }
-    }
-}
-
-/// TMDB's genre, converted to this crate's [`Genre`].
-impl From<tmdb_client::models::Genre> for Genre {
-    fn from(g: tmdb_client::models::Genre) -> Self {
-        Self {
-            id: g.id.unwrap_or(0),
-            name: g.name.unwrap_or_default(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Movie, MovieDetails, MovieObject, MovieSummary};
+    use super::Movie;
 
     fn test_movie() -> Movie {
         Movie {
@@ -508,6 +580,8 @@ mod tests {
             popularity: 73.433,
             adult: false,
             certifications: None,
+            cast: vec![],
+            collection: None,
         }
     }
 
@@ -541,32 +615,10 @@ mod tests {
     }
 
     #[test]
-    fn movie_details_convert() {
-        let details = MovieDetails {
-            id: Some(550),
-            title: Some("Fight Club".into()),
-            original_title: Some("Fight Club".into()),
-            original_language: Some("en".into()),
-            release_date: Some("1999-10-15".into()),
-            imdb_id: Some("tt0137523".into()),
-            ..Default::default()
-        };
-        let m: Movie = details.into();
-        assert_eq!(m.id, 550);
-        assert_eq!(m.title, "Fight Club");
-        assert_eq!(m.release_date.as_deref(), Some("1999-10-15"));
-        assert_eq!(m.imdb_id.as_deref(), Some("tt0137523"));
-    }
-
-    #[test]
     fn image_url_builds() {
         assert_eq!(
             super::image_url("/abc.jpg", "w342"),
             "https://image.tmdb.org/t/p/w342/abc.jpg"
-        );
-        assert_eq!(
-            test_movie().poster_url().as_deref(),
-            Some("https://image.tmdb.org/t/p/original/abc.jpg")
         );
     }
 
@@ -590,24 +642,12 @@ mod tests {
         }"#;
         let response: super::ReleaseDatesResponse = serde_json::from_str(json).unwrap();
         let certifications = response.certifications();
-        assert_eq!(certifications.us.as_deref(), Some("R"));
-        assert_eq!(certifications.gb.as_deref(), Some("15"));
-        assert_eq!(certifications.de.as_deref(), Some("FSK 16"));
-        // Unsupported regions (JP) and release-less regions (AU) are not stored.
+        assert_eq!(certifications.get("US"), Some("R"));
+        assert_eq!(certifications.get("GB"), Some("15"));
+        assert_eq!(certifications.get("DE"), Some("FSK 16"));
+        assert_eq!(certifications.get("JP"), Some("R12+"));
+        // Release-less regions (AU) are not stored.
+        assert_eq!(certifications.get("AU"), None);
         assert!(!certifications.is_empty());
-    }
-
-    #[test]
-    fn movie_object_to_summary() {
-        let o = MovieObject {
-            id: Some(550),
-            title: Some("Fight Club".into()),
-            genre_ids: Some(vec![18]),
-            ..Default::default()
-        };
-        let s: MovieSummary = o.into();
-        assert_eq!(s.id, 550);
-        assert_eq!(s.title, "Fight Club");
-        assert_eq!(s.genre_ids, vec![18]);
     }
 }

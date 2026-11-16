@@ -1,68 +1,16 @@
-// The log list: every viewing, most recent first, with edit/delete actions.
+// The log list: every viewing, filterable and sortable, with edit/delete
+// actions. Format labels come from the stored `format_summary`.
 import { el } from "../dom";
 import { api } from "../api";
 import { getState, go, reload, showError } from "../app";
 import { formatDisplay } from "../time";
-import type { Format, Leaf, RatingBoard, WatchLog } from "../types";
+import { applyFilter, defaultFilter, type LogFilter } from "../filters";
+import { certificationIcon } from "../cert-icons";
+import type { WatchLog } from "../types";
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w92";
 
-const DCI_LABEL: Record<string, string> = {
-  "2k_lamp": "2K xenon",
-  "2k_laser": "2K laser",
-  "4k_lamp": "4K xenon",
-  "4k_laser": "4K laser",
-};
-const IMAX_LABEL: Record<string, string> = {
-  "2k_xenon": "2K xenon",
-  "4k_single_laser": "4K single laser",
-  "4k_dual_laser": "4K dual laser",
-  "70mm": "70mm",
-};
-const FILM_LABEL: Record<string, string> = { "35mm": "35mm", "70mm": "70mm" };
-const SCREEN_LABEL: Record<string, string> = {
-  regular: "Regular",
-  plf: "PLF",
-  vip: "VIP",
-  "4dx": "4DX",
-  screenx: "ScreenX",
-  imax_class: "IMAX 1.43:1",
-  imax_retrofit: "IMAX 1.90:1",
-  ultra_4dx: "Ultra 4DX",
-};
-const MEDIUM_LABEL: Record<string, string> = {
-  dvd: "DVD",
-  hd_dvd: "HD DVD",
-  bluray: "Blu-ray",
-  uhd_bluray: "4K UHD Blu-ray",
-  laserdisc: "LaserDisc",
-  streaming: "Streaming",
-  broadcast: "Broadcast",
-  telecine: "Telecine",
-};
-
-function leafLabel(map: Record<string, string>, leaf: Leaf): string {
-  if (typeof leaf === "string") return map[leaf] ?? leaf;
-  return leaf.custom || "Custom";
-}
-
-function formatSummary(format: Format | null): string {
-  if (!format) return "—";
-  if ("home" in format) return leafLabel(MEDIUM_LABEL, format.home.medium);
-  const t = format.theatre;
-  let proj: string;
-  if ("dci" in t.projection) proj = leafLabel(DCI_LABEL, t.projection.dci);
-  else if ("imax" in t.projection) proj = leafLabel(IMAX_LABEL, t.projection.imax);
-  else proj = leafLabel(FILM_LABEL, t.projection.film);
-  const screen = leafLabel(SCREEN_LABEL, t.screen);
-  const flags = [
-    t.three_d && "3D",
-    t.hfr && "HFR",
-    t.dbox && "D-BOX",
-  ].filter(Boolean) as string[];
-  const tail = flags.length > 0 ? " · " + flags.join(", ") : "";
-  return `${proj} · ${screen}${tail}`;
-}
+let filter: LogFilter = { ...defaultFilter };
 
 export function renderLogs(content: HTMLElement): void {
   const logs = getState().logs;
@@ -78,25 +26,144 @@ export function renderLogs(content: HTMLElement): void {
     return;
   }
 
+  content.append(renderFilterBar());
+
+  const visible = applyFilter(logs, filter);
+  if (visible.length === 0) {
+    content.append(el("p", { class: "empty" }, "No viewings match these filters."));
+    return;
+  }
+
   const list = el("ul", { class: "log-list" });
-  for (const log of logs) list.append(renderRow(log));
+  for (const log of visible) list.append(renderRow(log));
   content.append(list);
+}
+
+function renderAgain(): void {
+  const content = document.querySelector<HTMLElement>(".content");
+  if (content) {
+    content.replaceChildren();
+    renderLogs(content);
+  }
+}
+
+function renderFilterBar(): HTMLElement {
+  const years = [...new Set(getState().logs.map((log) => new Date(log.watched_at).getUTCFullYear()))]
+    .sort((a, b) => b - a);
+
+  const text = el("input", {
+    class: "search",
+    type: "text",
+    placeholder: "Filter by title…",
+    value: filter.text,
+    oninput: (e: Event) => {
+      filter = { ...filter, text: (e.currentTarget as HTMLInputElement).value };
+      renderAgain();
+    },
+  });
+
+  const venue = el(
+    "select",
+    {
+      onchange: (e: Event) => {
+        filter = {
+          ...filter,
+          venue: (e.currentTarget as HTMLSelectElement).value as LogFilter["venue"],
+        };
+        renderAgain();
+      },
+    },
+    el("option", { value: "all" }, "All venues"),
+    el("option", { value: "theatre" }, "Theatre"),
+    el("option", { value: "home" }, "Home")
+  );
+  venue.value = filter.venue;
+
+  const year = el(
+    "select",
+    {
+      onchange: (e: Event) => {
+        const value = (e.currentTarget as HTMLSelectElement).value;
+        filter = { ...filter, year: value === "all" ? "all" : Number(value) };
+        renderAgain();
+      },
+    },
+    el("option", { value: "all" }, "All years"),
+    ...years.map((y) => el("option", { value: String(y) }, String(y)))
+  );
+  year.value = String(filter.year);
+
+  const rating = el(
+    "select",
+    {
+      onchange: (e: Event) => {
+        filter = {
+          ...filter,
+          rating: (e.currentTarget as HTMLSelectElement).value as LogFilter["rating"],
+        };
+        renderAgain();
+      },
+    },
+    el("option", { value: "all" }, "Any rating"),
+    el("option", { value: "up" }, "👍"),
+    el("option", { value: "down" }, "👎")
+  );
+  rating.value = filter.rating;
+
+  const sort = el(
+    "select",
+    {
+      onchange: (e: Event) => {
+        filter = {
+          ...filter,
+          sort: (e.currentTarget as HTMLSelectElement).value as LogFilter["sort"],
+        };
+        renderAgain();
+      },
+    },
+    el("option", { value: "recent" }, "Most recent"),
+    el("option", { value: "oldest" }, "Oldest first"),
+    el("option", { value: "title" }, "Title"),
+    el("option", { value: "rating" }, "Rating")
+  );
+  sort.value = filter.sort;
+
+  return el("div", { class: "filter-bar" }, text, venue, year, rating, sort);
 }
 
 /// The film's certification for the user's selected rating board, or null
 /// when unknown (the film has no certifications for that board).
-function certificationFor(log: WatchLog, board: RatingBoard): string | null {
-  const c = log.certifications;
-  if (c == null) return null;
-  if (board === "mpa") return c.us;
-  if (board === "bbfc") return c.gb;
-  return c.de;
+function certificationFor(log: WatchLog, board: string): string | null {
+  return log.certifications?.[board.toUpperCase()] ?? null;
+}
+
+function certificationBadge(region: string, cert: string | null): HTMLElement {
+  const badge = el("span", { class: "badge" + (cert ? "" : " unrated") });
+  if (cert == null) {
+    badge.append("unrated");
+    return badge;
+  }
+  const icon = certificationIcon(region, cert);
+  if (icon != null) {
+    badge.append(
+      el("img", {
+        class: "cert-icon",
+        src: icon,
+        alt: "",
+        onerror: (e: Event) => {
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+        },
+      })
+    );
+  }
+  badge.append(" " + cert);
+  return badge;
 }
 
 function renderRow(log: WatchLog): HTMLElement {
-  const rating =
-    log.rating === "up" ? "👍" : log.rating === "down" ? "👎" : null;
-  const cert = certificationFor(log, getState().settings.selected_board);
+  const rating = log.rating === "up" ? "👍" : log.rating === "down" ? "👎" : null;
+  const board = getState().settings.selected_board;
+  const cert = certificationFor(log, board);
   const venue = log.venue === "theatre" ? "🎭 Theatre" : "🏠 Home";
   const poster = log.poster_path
     ? el("img", { class: "poster", src: IMAGE_BASE + log.poster_path, alt: "" })
@@ -105,6 +172,7 @@ function renderRow(log: WatchLog): HTMLElement {
   const actions = el(
     "span",
     { class: "row-actions" },
+    el("button", { class: "btn", onclick: () => go("film", log.film_id) }, "Film"),
     el("button", { class: "btn", onclick: () => go("edit", log.id) }, "Edit"),
     el("button", { class: "btn danger", onclick: () => deleteLog(log) }, "Delete")
   );
@@ -123,14 +191,14 @@ function renderRow(log: WatchLog): HTMLElement {
         log.release_year != null ? el("span", { class: "dim" }, ` (${log.release_year})`) : "",
         el("span", { class: "badge venue-" + log.venue }, venue),
         rating ? el("span", { class: "rating" }, " " + rating) : "",
-        el("span", { class: "badge" + (cert ? "" : " unrated") }, cert ?? "unrated"),
+        certificationBadge(board, cert),
         log.rewatch ? el("span", { class: "badge rewatch" }, " rewatch") : ""
       ),
       el(
         "div",
         { class: "log-sub" },
-        el("span", { class: "dim" }, formatDisplay(log.watched_at)),
-        el("span", { class: "dim" }, " · " + formatSummary(log.format))
+        el("span", { class: "dim" }, formatDisplay(log.watched_at, log.timezone)),
+        el("span", { class: "dim" }, " · " + (log.format_summary || "—"))
       )
     ),
     actions
@@ -142,7 +210,7 @@ async function deleteLog(log: WatchLog): Promise<void> {
   try {
     await api.deleteLog(log.id);
     await reload();
-    go("logs");
+    renderAgain();
   } catch (e) {
     showError(e);
   }

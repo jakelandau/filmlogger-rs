@@ -4,17 +4,20 @@
 //! and resolves/enriches them through the TMDB API. The log persists in a
 //! single-file SQLite database.
 
+pub mod catalog;
 pub mod domain;
 pub mod error;
 pub mod service;
 pub mod store;
 pub mod tmdb;
 
+pub use catalog::{FormatCatalog, FormatLegality, FormatOption, format_catalog};
 pub use domain::{
-    Certifications, Dci, Film, FilmId, Flag, Format, HomeMedium, Imax, Projection, Rating,
-    RatingBoard, ScreenClass, Settings, Venue, WatchLog,
+    CastMember, Certifications, CollectionRef, Dci, Film, FilmId, FilmListEntry, FilmMetadata,
+    FilmPage, FilmStats, Flag, Format, Genre, HomeMedium, Imax, NewLogDetails, Projection, Rating,
+    RatingBoard, ScreenClass, Settings, Venue, WatchLog, rating_board, rating_boards,
 };
 pub use error::Error;
 pub use service::FilmLogger;
 pub use store::{FilmViewings, Stats, Store, VenueCounts};
-pub use tmdb::{COMPILED_API_KEY, Genre, Movie, MovieSummary, SearchPage, TmdbClient};
+pub use tmdb::{COMPILED_API_KEY, Movie, MovieSummary, SearchPage, TmdbClient};

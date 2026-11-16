@@ -9,16 +9,87 @@ env:
   TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
 jobs:
-  test:
-    runs-on: windows-latest
+  rust:
+    name: Rust core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Tauri system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Test
         run: cargo test --workspace
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Format
         run: cargo fmt --all -- --check
+
+  live-smoke:
+    name: Live TMDB smoke
+    needs: rust
+    if: ${{ env.TMDB_API_KEY != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Live smoke (requires the TMDB_API_KEY secret)
-        run: cargo run --example tmdb_smoke
+        run: cargo run -p film-logger --example tmdb_smoke
+
+  ui:
+    name: Desktop UI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop/ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/ui/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Type-check
+        run: npm run check
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Assemble
+        working-directory: apps/android
+        run: |
+          ./gradlew \
+            -Dorg.gradle.java.home="$JAVA_HOME" \
+            assembleDebug \
+            -PtmdbApiKey="$TMDB_API_KEY" \
+            -PcargoBin="$(command -v cargo)" \
+            -PndkRoot="$ANDROID_NDK_LATEST_HOME"

@@ -1,18 +1,23 @@
 //! The `FilmLogger` facade.
 //!
 //! [`FilmLogger`] bundles the store, user settings, and TMDB client into the
-//! single surface the desktop and Android apps drive: adding films (search,
-//! TMDB enrichment, logging a viewing), listing and editing logs, board
+//! single surface the desktop and Android apps drive: searching films, adding
+//! and logging viewings, the film library and per-film pages, board
 //! selection, statistics, and exporting/importing the whole database.
 //!
-//! The database is a single file held in write-ahead logging mode;
-//! [`FilmLogger::export_to`] checkpoints it and copies the file, and
-//! [`FilmLogger::import_from`] replaces the contents from a copy.
+//! Export and import go through SQLite's online backup API, so a copy is
+//! consistent even while the database runs in write-ahead logging mode, and an
+//! imported file is validated before it can replace live data.
 
-use std::fs;
 use std::path::Path;
 
-use crate::domain::{Format, RatingBoard, Settings, Venue, WatchLog};
+use chrono::Local;
+
+use crate::catalog::{FormatCatalog, format_catalog};
+use crate::domain::{
+    FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, Format, NewLogDetails, RatingBoard,
+    Settings, Venue, WatchLog,
+};
 use crate::error::Error;
 use crate::store::{Stats, Store};
 use crate::tmdb::{Movie, SearchPage, TmdbClient};
@@ -87,28 +92,48 @@ impl FilmLogger {
         self.client.find_by_imdb_id(imdb_id)
     }
 
-    /// Log a viewing of a film found by TMDB id, enriching the log from the
-    /// film's details and board certifications.
-    ///
-    /// `format` must match `venue`; it is validated. A log without a format
-    /// fails validation ([`Error::MissingFormat`]).
+    /// Add a film by TMDB id and log a viewing of it, enriching both the
+    /// film's stored metadata and the log from TMDB.
     ///
     /// # Errors
     ///
-    /// TMDB or store errors; [`Error::MissingFormat`] if no `format` is
-    /// given, [`Error::VenueFormatMismatch`] or a format validation error if
-    /// `format` is inconsistent.
+    /// TMDB or store errors; [`Error::VenueFormatMismatch`] or a format
+    /// validation error if `format` is inconsistent.
     pub fn add_film(
         &self,
         tmdb_id: i64,
         venue: Venue,
-        format: Option<Format>,
+        format: Format,
+        details: &NewLogDetails,
     ) -> Result<WatchLog, Error> {
+        if format.venue() != venue {
+            return Err(Error::VenueFormatMismatch { venue, format });
+        }
+        format.validate()?;
         let movie = self.client.movie(tmdb_id)?;
-        let log = match format {
-            Some(format) => WatchLog::from_movie_with_format_now(&movie, venue, format)?,
-            None => WatchLog::from_movie_now(&movie, venue),
-        };
+        self.store.upsert_film(&FilmMetadata::from_movie(&movie))?;
+        let mut log = WatchLog::from_movie_with_format_now(&movie, venue, format)?;
+        apply_details(&mut log, details);
+        self.store.insert(log)
+    }
+
+    /// Log a viewing of an already-stored film. With no network access, the
+    /// log's denormalized fields come from the film's stored metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FilmNotFound`] if the film is not stored, a format
+    /// validation error if `format` is inconsistent, or store errors.
+    pub fn log_film(
+        &self,
+        film_id: &FilmId,
+        venue: Venue,
+        format: Format,
+        details: &NewLogDetails,
+    ) -> Result<WatchLog, Error> {
+        let film = self.store.get_film(film_id)?.ok_or(Error::FilmNotFound)?;
+        let mut log = WatchLog::from_film(&film, venue, format, Local::now())?;
+        apply_details(&mut log, details);
         self.store.insert(log)
     }
 
@@ -140,6 +165,83 @@ impl FilmLogger {
         self.store.list()
     }
 
+    /// The film library, ordered by title.
+    ///
+    /// # Errors
+    ///
+    /// Returns store or serialization errors.
+    pub fn films(&self) -> Result<Vec<FilmListEntry>, Error> {
+        self.store.list_films()
+    }
+
+    /// One film's page: metadata, viewing history, and statistics.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FilmNotFound`] if the film is not stored, otherwise
+    /// store or serialization errors.
+    pub fn film_page(&self, film_id: &FilmId) -> Result<FilmPage, Error> {
+        let film = self.store.get_film(film_id)?.ok_or(Error::FilmNotFound)?;
+        let logs = self.store.film_logs(film_id)?;
+        Ok(FilmPage {
+            stats: film_stats(&logs),
+            film,
+            logs,
+        })
+    }
+
+    /// Re-fetch a stored film's metadata from TMDB, keeping its canonical id
+    /// (so its logs stay attached) and its user-owned state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FilmNotFound`] if the film is not stored,
+    /// [`Error::NoTmdbId`] if it has no TMDB id, otherwise TMDB or store
+    /// errors.
+    pub fn refresh_film(&self, film_id: &FilmId) -> Result<FilmMetadata, Error> {
+        let existing = self.store.get_film(film_id)?.ok_or(Error::FilmNotFound)?;
+        let tmdb_id = existing.tmdb_id.ok_or_else(|| Error::NoTmdbId {
+            film_id: existing.film_id.clone(),
+        })?;
+        let movie = self.client.movie(tmdb_id)?;
+        let mut film = FilmMetadata::from_movie(&movie);
+        film.film_id.clone_from(&existing.film_id);
+        self.store.upsert_film(&film)?;
+        self.store
+            .get_film(&existing.film_id)?
+            .ok_or(Error::FilmNotFound)
+    }
+
+    /// Mark a film a favorite (or clear it), returning the stored film.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FilmNotFound`] if the film is not stored, otherwise
+    /// store errors.
+    pub fn set_favorite(&self, film_id: &FilmId, favorite: bool) -> Result<FilmMetadata, Error> {
+        self.store.set_favorite(film_id, favorite)?;
+        self.store.get_film(film_id)?.ok_or(Error::FilmNotFound)
+    }
+
+    /// Replace a film's tags (normalized and capped), returning the stored
+    /// film.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FilmNotFound`] if the film is not stored, otherwise
+    /// store errors.
+    pub fn set_tags(&self, film_id: &FilmId, tags: Vec<String>) -> Result<FilmMetadata, Error> {
+        let tags = FilmMetadata::normalize_tags(tags);
+        self.store.set_tags(film_id, &tags)?;
+        self.store.get_film(film_id)?.ok_or(Error::FilmNotFound)
+    }
+
+    /// The viewing-format catalog both apps render.
+    #[must_use]
+    pub fn format_catalog(&self) -> FormatCatalog {
+        format_catalog()
+    }
+
     /// Aggregate statistics over all logs.
     ///
     /// # Errors
@@ -158,40 +260,82 @@ impl FilmLogger {
         self.store.settings()
     }
 
-    /// Persist the selected rating board.
+    /// Every rating board TMDB reports certifications for.
+    #[must_use]
+    pub fn rating_boards(&self) -> Vec<RatingBoard> {
+        crate::domain::rating_boards()
+    }
+
+    /// Persist the selected rating board by region code.
     ///
     /// # Errors
     ///
     /// Returns store or serialization errors.
-    pub fn set_selected_board(&self, board: RatingBoard) -> Result<(), Error> {
+    pub fn set_selected_board(&self, board: &str) -> Result<(), Error> {
         self.store.set_selected_board(board)
     }
 
-    /// Export the database to `dest`: checkpoint, then copy the file.
+    /// Export the database to `dest` with SQLite's backup API.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Io`] if the copy fails, otherwise store errors.
+    /// Returns [`Error::Io`] if an existing destination cannot be removed,
+    /// otherwise store errors.
     pub fn export_to(&self, dest: impl AsRef<Path>) -> Result<(), Error> {
-        self.store.checkpoint()?;
-        fs::copy(self.store.path(), dest)?;
-        Ok(())
+        self.store.export_to(dest)
     }
 
-    /// Replace the database contents with the file at `src`.
-    ///
-    /// A checkpoint of the current database happens first so its file is
-    /// self-contained when overwritten.
+    /// Replace the database contents with the validated file at `src`.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Io`] if the copy fails, otherwise store errors.
+    /// Returns [`Error::InvalidImport`] if the file is rejected, otherwise
+    /// store errors.
     pub fn import_from(&mut self, src: impl AsRef<Path>) -> Result<(), Error> {
-        let path = self.store.path().to_owned();
-        self.store.checkpoint()?;
-        fs::copy(src, &path)?;
-        let store = Store::open(&path)?;
-        self.store = store;
-        Ok(())
+        self.store.import_from(src)
     }
+}
+
+/// Apply the user-supplied details to a new log.
+fn apply_details(log: &mut WatchLog, details: &NewLogDetails) {
+    if let Some(watched_at) = details.watched_at {
+        log.watched_at = watched_at;
+    }
+    if let Some(timezone) = &details.timezone {
+        let timezone = timezone.trim();
+        log.timezone = if timezone.is_empty() {
+            None
+        } else {
+            Some(timezone.to_owned())
+        };
+    }
+    if let Some(notes) = &details.notes {
+        let notes = notes.trim();
+        log.notes = if notes.is_empty() {
+            None
+        } else {
+            Some(notes.to_owned())
+        };
+    }
+    if let Some(rating) = details.rating {
+        log.rating = Some(rating);
+    }
+}
+
+/// Compute a film's viewing statistics from its logs (most recent first).
+fn film_stats(logs: &[WatchLog]) -> FilmStats {
+    let mut stats = FilmStats {
+        viewings: logs.len(),
+        ..FilmStats::default()
+    };
+    for log in logs {
+        match log.venue {
+            Venue::Theatre => stats.theatre += 1,
+            Venue::Home => stats.home += 1,
+        }
+        *stats.formats.entry(log.format_summary.clone()).or_default() += 1;
+    }
+    stats.first_watched_at = logs.iter().map(|log| log.watched_at).min();
+    stats.last_watched_at = logs.iter().map(|log| log.watched_at).max();
+    stats
 }

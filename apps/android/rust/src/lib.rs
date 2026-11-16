@@ -13,7 +13,10 @@ pub mod types;
 
 use std::sync::{Arc, Mutex};
 
-use crate::types::{Format, LoggerError, Movie, RatingBoard, SearchPage, Settings, Stats, Venue, WatchLog};
+use crate::types::{
+    FilmId, FilmListEntry, FilmMetadata, FilmPage, Format, FormatCatalog, LoggerError, Movie,
+    NewLogDetails, RatingBoard, SearchPage, Settings, Stats, Venue, WatchLog,
+};
 use film_logger::FilmLogger;
 
 /// The shared logger, behind a mutex because methods may need mutable access
@@ -95,13 +98,15 @@ impl Logger {
         &self,
         tmdb_id: i64,
         venue: Venue,
-        format: Option<Format>,
+        format: Format,
+        details: NewLogDetails,
     ) -> Result<WatchLog, LoggerError> {
+        let details = details.to_core()?;
         let log = self
             .inner
             .lock()
             .expect("logger poisoned")
-            .add_film(tmdb_id, venue.into(), format.map(Into::into))
+            .add_film(tmdb_id, venue.into(), format.into(), &details)
             .map_err(LoggerError::from)?;
         Ok(log.into())
     }
@@ -200,7 +205,22 @@ impl Logger {
         Ok(settings.into())
     }
 
-    /// Persist the selected rating board.
+    /// Every rating board TMDB reports certifications for.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    pub fn rating_boards(&self) -> Vec<RatingBoard> {
+        self.inner
+            .lock()
+            .expect("logger poisoned")
+            .rating_boards()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    /// Persist the selected rating board by region code.
     ///
     /// # Panics
     ///
@@ -209,11 +229,11 @@ impl Logger {
     /// # Errors
     ///
     /// Returns a database error on a write failure.
-    pub fn set_selected_board(&self, board: RatingBoard) -> Result<(), LoggerError> {
+    pub fn set_selected_board(&self, board: String) -> Result<(), LoggerError> {
         self.inner
             .lock()
             .expect("logger poisoned")
-            .set_selected_board(board.into())
+            .set_selected_board(&board)
             .map_err(LoggerError::from)
     }
 
@@ -246,6 +266,168 @@ impl Logger {
     pub fn import_from(&self, src: String) -> Result<(), LoggerError> {
         let mut logger = self.inner.lock().expect("logger poisoned");
         logger.import_from(src).map_err(LoggerError::from)
+    }
+
+    /// Log a viewing of an already-stored film (no network).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LoggerError::FilmNotFound`] if the film is not stored, or a
+    /// format validation error.
+    pub fn log_film(
+        &self,
+        film_id: FilmId,
+        venue: Venue,
+        format: Format,
+        details: NewLogDetails,
+    ) -> Result<WatchLog, LoggerError> {
+        let details = details.to_core()?;
+        let log = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .log_film(&film_id.into(), venue.into(), format.into(), &details)
+            .map_err(LoggerError::from)?;
+        Ok(log.into())
+    }
+
+    /// The currently popular movies.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns TMDB or HTTP errors.
+    pub fn popular_movies(&self, page: i32) -> Result<SearchPage, LoggerError> {
+        let page = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .popular_movies(page)
+            .map_err(LoggerError::from)?;
+        Ok(page.into())
+    }
+
+    /// Re-fetch a stored film's metadata from TMDB.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LoggerError::FilmNotFound`] or [`LoggerError::NoTmdbId`].
+    pub fn refresh_film(&self, film_id: FilmId) -> Result<FilmMetadata, LoggerError> {
+        let film = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .refresh_film(&film_id.into())
+            .map_err(LoggerError::from)?;
+        Ok(film.into())
+    }
+
+    /// The film library, with viewing summaries.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns a database error on a read failure.
+    pub fn films(&self) -> Result<Vec<FilmListEntry>, LoggerError> {
+        let films = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .films()
+            .map_err(LoggerError::from)?;
+        Ok(films.into_iter().map(Into::into).collect())
+    }
+
+    /// One film's page: metadata, history, and statistics.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LoggerError::FilmNotFound`] if the film is not stored.
+    pub fn film_page(&self, film_id: FilmId) -> Result<FilmPage, LoggerError> {
+        let page = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .film_page(&film_id.into())
+            .map_err(LoggerError::from)?;
+        Ok(page.into())
+    }
+
+    /// Mark a film a favorite (or clear it).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LoggerError::FilmNotFound`] if the film is not stored.
+    pub fn set_favorite(
+        &self,
+        film_id: FilmId,
+        favorite: bool,
+    ) -> Result<FilmMetadata, LoggerError> {
+        let film = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .set_favorite(&film_id.into(), favorite)
+            .map_err(LoggerError::from)?;
+        Ok(film.into())
+    }
+
+    /// Replace a film's tags (normalized and capped).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LoggerError::FilmNotFound`] if the film is not stored.
+    pub fn set_tags(
+        &self,
+        film_id: FilmId,
+        tags: Vec<String>,
+    ) -> Result<FilmMetadata, LoggerError> {
+        let film = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .set_tags(&film_id.into(), tags)
+            .map_err(LoggerError::from)?;
+        Ok(film.into())
+    }
+
+    /// The viewing-format catalog both apps render.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    pub fn format_catalog(&self) -> FormatCatalog {
+        self.inner
+            .lock()
+            .expect("logger poisoned")
+            .format_catalog()
+            .into()
     }
 }
 

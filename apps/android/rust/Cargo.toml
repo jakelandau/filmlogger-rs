@@ -12,6 +12,7 @@ crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
 chrono = { workspace = true }
+serde_json = { workspace = true }
 film-logger = { path = "../../../crates/film-logger" }
 uniffi = { version = "0.32" }
 

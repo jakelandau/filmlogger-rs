@@ -3,8 +3,10 @@
 use chrono::{DateTime, Utc};
 
 use crate::types::{
-    Certifications, Dci, Film, FilmId, FilmViewings, Format, Genre, HomeMedium, Imax,
-    LoggerError, Movie, MovieSummary, Projection, Rating, RatingBoard, ScreenClass, SearchPage,
+    CastMember, Certification, Certifications, CollectionRef, CountEntry, Dci, Film, FilmId,
+    FilmListEntry, FilmMetadata, FilmPage, FilmStats, FilmViewings, Format, FormatCatalog,
+    FormatGroup, FormatLegality, FormatOption, Genre, HomeMedium, Imax, LoggerError, Movie,
+    MovieSummary, NewLogDetails, Projection, Rating, RatingBoard, ScreenClass, SearchPage,
     Settings, Stats, Venue, VenueCounts, WatchLog, YearCount,
 };
 use film_logger as core;
@@ -52,23 +54,11 @@ impl From<core::Rating> for Rating {
 
 // --- RatingBoard ----------------------------------------------------------
 
-impl From<RatingBoard> for core::RatingBoard {
-    fn from(b: RatingBoard) -> Self {
-        match b {
-            RatingBoard::Mpa => core::RatingBoard::Mpa,
-            RatingBoard::Bbfc => core::RatingBoard::Bbfc,
-            RatingBoard::Fsk => core::RatingBoard::Fsk,
-        }
-    }
-}
-
 impl From<core::RatingBoard> for RatingBoard {
     fn from(b: core::RatingBoard) -> Self {
-        match b {
-            core::RatingBoard::Mpa => RatingBoard::Mpa,
-            core::RatingBoard::Bbfc => RatingBoard::Bbfc,
-            core::RatingBoard::Fsk => RatingBoard::Fsk,
-            _ => unreachable!(),
+        Self {
+            region: b.region,
+            name: b.name,
         }
     }
 }
@@ -281,7 +271,9 @@ impl From<Format> for core::Format {
                 hfr,
                 dbox,
             },
-            Format::Home { medium } => core::Format::Home { medium: medium.into() },
+            Format::Home { medium } => core::Format::Home {
+                medium: medium.into(),
+            },
         }
     }
 }
@@ -302,7 +294,9 @@ impl From<core::Format> for Format {
                 hfr,
                 dbox,
             },
-            core::Format::Home { medium } => Format::Home { medium: medium.into() },
+            core::Format::Home { medium } => Format::Home {
+                medium: medium.into(),
+            },
             _ => unreachable!(),
         }
     }
@@ -312,20 +306,24 @@ impl From<core::Format> for Format {
 
 impl From<Certifications> for core::Certifications {
     fn from(c: Certifications) -> Self {
-        core::Certifications {
-            us: c.us,
-            gb: c.gb,
-            de: c.de,
+        let mut certifications = core::Certifications::default();
+        for value in c.values {
+            certifications.insert(value.region, value.rating);
         }
+        certifications
     }
 }
 
 impl From<core::Certifications> for Certifications {
     fn from(c: core::Certifications) -> Self {
         Self {
-            us: c.us,
-            gb: c.gb,
-            de: c.de,
+            values: c
+                .iter()
+                .map(|(region, rating)| Certification {
+                    region: region.to_owned(),
+                    rating: rating.to_owned(),
+                })
+                .collect(),
         }
     }
 }
@@ -356,11 +354,13 @@ impl WatchLog {
             certifications: self.certifications.clone().map(Into::into),
             venue: self.venue.into(),
             watched_at,
+            timezone: self.timezone.clone(),
             notes: self.notes.clone(),
             rating: self.rating.map(Into::into),
             rewatch: self.rewatch,
             watch_count: self.watch_count,
             format: self.format.clone().map(Into::into),
+            format_summary: self.format_summary.clone(),
         })
     }
 }
@@ -378,11 +378,13 @@ impl From<core::WatchLog> for WatchLog {
             certifications: l.certifications.map(Into::into),
             venue: l.venue.into(),
             watched_at: l.watched_at.to_rfc3339(),
+            timezone: l.timezone,
             notes: l.notes,
             rating: l.rating.map(Into::into),
             rewatch: l.rewatch,
             watch_count: l.watch_count,
             format: l.format.map(Into::into),
+            format_summary: l.format_summary,
         }
     }
 }
@@ -421,6 +423,8 @@ impl From<core::Movie> for Movie {
             popularity: m.popularity,
             adult: m.adult,
             certifications: m.certifications.map(Into::into),
+            cast: m.cast.into_iter().map(Into::into).collect(),
+            collection: m.collection.map(Into::into),
         }
     }
 }
@@ -503,8 +507,24 @@ impl From<core::Stats> for Stats {
             #[allow(clippy::cast_possible_truncation)]
             rewatches: s.rewatches as u32,
             top_films: s.top_films.into_iter().map(Into::into).collect(),
+            viewings_by_month: count_entries(s.viewings_by_month),
+            viewings_by_projection_family: count_entries(s.viewings_by_projection_family),
+            viewings_by_screen: count_entries(s.viewings_by_screen),
+            viewings_by_medium: count_entries(s.viewings_by_medium),
+            viewings_by_flag: count_entries(s.viewings_by_flag),
         }
     }
+}
+
+/// Convert a breakdown map into ordered `(key, count)` entries.
+fn count_entries(map: std::collections::BTreeMap<String, usize>) -> Vec<CountEntry> {
+    map.into_iter()
+        .map(|(key, count)| CountEntry {
+            key,
+            #[allow(clippy::cast_possible_truncation)]
+            count: count as u32,
+        })
+        .collect()
 }
 
 // --- Settings ------------------------------------------------------------
@@ -512,8 +532,176 @@ impl From<core::Stats> for Stats {
 impl From<core::Settings> for Settings {
     fn from(s: core::Settings) -> Self {
         Self {
-            selected_board: s.selected_board.into(),
+            selected_board: s.selected_board,
         }
+    }
+}
+
+// --- Films and the library ------------------------------------------------
+
+impl From<core::CastMember> for CastMember {
+    fn from(c: core::CastMember) -> Self {
+        Self {
+            id: c.id,
+            name: c.name,
+            character: c.character,
+            order: c.order,
+        }
+    }
+}
+
+impl From<core::CollectionRef> for CollectionRef {
+    fn from(c: core::CollectionRef) -> Self {
+        Self {
+            id: c.id,
+            name: c.name,
+            poster_path: c.poster_path,
+        }
+    }
+}
+
+impl From<core::FilmMetadata> for FilmMetadata {
+    fn from(f: core::FilmMetadata) -> Self {
+        Self {
+            film_id: f.film_id.into(),
+            tmdb_id: f.tmdb_id,
+            imdb_id: f.imdb_id,
+            title: f.title,
+            original_title: f.original_title,
+            release_date: f.release_date,
+            release_year: f.release_year,
+            runtime_minutes: f.runtime_minutes,
+            overview: f.overview,
+            tagline: f.tagline,
+            original_language: f.original_language,
+            poster_path: f.poster_path,
+            backdrop_path: f.backdrop_path,
+            vote_average: f.vote_average,
+            vote_count: f.vote_count,
+            popularity: f.popularity,
+            adult: f.adult,
+            genres: f.genres.into_iter().map(Into::into).collect(),
+            cast: f.cast.into_iter().map(Into::into).collect(),
+            certifications: f.certifications.map(Into::into),
+            collection: f.collection.map(Into::into),
+            tags: f.tags,
+            favorite: f.favorite,
+            watchlisted: f.watchlisted,
+            metadata_refreshed_at: f.metadata_refreshed_at.map(|d| d.to_rfc3339()),
+        }
+    }
+}
+
+impl From<core::FilmListEntry> for FilmListEntry {
+    fn from(e: core::FilmListEntry) -> Self {
+        Self {
+            film: e.film.into(),
+            #[allow(clippy::cast_possible_truncation)]
+            viewings: e.viewings as u32,
+            last_watched_at: e.last_watched_at.map(|d| d.to_rfc3339()),
+        }
+    }
+}
+
+impl From<core::FilmStats> for FilmStats {
+    fn from(s: core::FilmStats) -> Self {
+        Self {
+            #[allow(clippy::cast_possible_truncation)]
+            viewings: s.viewings as u32,
+            #[allow(clippy::cast_possible_truncation)]
+            theatre: s.theatre as u32,
+            #[allow(clippy::cast_possible_truncation)]
+            home: s.home as u32,
+            first_watched_at: s.first_watched_at.map(|d| d.to_rfc3339()),
+            last_watched_at: s.last_watched_at.map(|d| d.to_rfc3339()),
+            formats: count_entries(s.formats),
+        }
+    }
+}
+
+impl From<core::FilmPage> for FilmPage {
+    fn from(p: core::FilmPage) -> Self {
+        Self {
+            film: p.film.into(),
+            logs: p.logs.into_iter().map(Into::into).collect(),
+            stats: p.stats.into(),
+        }
+    }
+}
+
+// --- Format catalog --------------------------------------------------------
+
+impl From<core::FormatOption> for FormatOption {
+    fn from(o: core::FormatOption) -> Self {
+        Self {
+            key: o.key,
+            label: o.label,
+        }
+    }
+}
+
+impl From<core::FormatLegality> for FormatLegality {
+    fn from(l: core::FormatLegality) -> Self {
+        Self {
+            family: l.family,
+            technology: l.technology,
+            screen: l.screen,
+            allowed_flags: l.allowed_flags,
+            forced_flags: l.forced_flags,
+        }
+    }
+}
+
+/// Convert a catalog's grouped options into ordered groups.
+fn format_groups(
+    groups: std::collections::BTreeMap<String, Vec<core::FormatOption>>,
+) -> Vec<FormatGroup> {
+    groups
+        .into_iter()
+        .map(|(key, options)| FormatGroup {
+            key,
+            options: options.into_iter().map(Into::into).collect(),
+        })
+        .collect()
+}
+
+impl From<core::FormatCatalog> for FormatCatalog {
+    fn from(c: core::FormatCatalog) -> Self {
+        Self {
+            families: c.families.into_iter().map(Into::into).collect(),
+            technologies: format_groups(c.technologies),
+            screens: format_groups(c.screens),
+            mediums: c.mediums.into_iter().map(Into::into).collect(),
+            flag_labels: c.flag_labels.into_iter().map(Into::into).collect(),
+            legal: c.legal.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl NewLogDetails {
+    /// Convert this DTO into the core details, parsing `watched_at`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LoggerError::Serde`] if `watched_at` is not a valid RFC 3339
+    /// timestamp.
+    pub fn to_core(&self) -> Result<core::NewLogDetails, LoggerError> {
+        let watched_at = match &self.watched_at {
+            Some(value) => Some(
+                DateTime::parse_from_rfc3339(value)
+                    .map(|d| d.with_timezone(&Utc))
+                    .map_err(|e| LoggerError::Serde {
+                        detail: format!("invalid watched_at: {e}"),
+                    })?,
+            ),
+            None => None,
+        };
+        Ok(core::NewLogDetails {
+            watched_at,
+            timezone: self.timezone.clone(),
+            notes: self.notes.clone(),
+            rating: self.rating.map(Into::into),
+        })
     }
 }
 
@@ -545,25 +733,33 @@ impl From<core::Error> for LoggerError {
             core::Error::MissingFormat { venue } => LoggerError::MissingFormat {
                 venue: venue.into(),
             },
-            core::Error::VenueFormatMismatch { venue, format } => LoggerError::VenueFormatMismatch {
-                venue: venue.into(),
-                format,
-            },
+            core::Error::VenueFormatMismatch { venue, format } => {
+                LoggerError::VenueFormatMismatch {
+                    venue: venue.into(),
+                    format: serde_json::to_string(&format).unwrap_or_default(),
+                }
+            }
             core::Error::ProjectionScreenMismatch { projection, screen } => {
                 LoggerError::ProjectionScreenMismatch {
-                    detail: format!(
-                        "projection {projection:?} does not run in screen {screen:?}"
-                    ),
+                    detail: format!("projection {projection:?} does not run in screen {screen:?}"),
                 }
             }
             core::Error::FlagMismatch {
-                flag, projection, screen,
+                flag,
+                projection,
+                screen,
             } => LoggerError::FlagMismatch {
                 detail: format!(
                     "flag {flag:?} does not match projection {projection:?} in screen {screen:?}"
                 ),
             },
             core::Error::InvalidWatchCount { count } => LoggerError::InvalidWatchCount { count },
+            core::Error::InvalidImport { detail } => LoggerError::InvalidImport { detail },
+            core::Error::NoTmdbId { film_id } => LoggerError::NoTmdbId {
+                film_id: film_id.into(),
+            },
+            core::Error::InvalidFilmId { value } => LoggerError::InvalidFilmId { value },
+            core::Error::InvalidStoredLog { id } => LoggerError::InvalidStoredLog { id },
         }
     }
 }

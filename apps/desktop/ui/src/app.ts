@@ -3,44 +3,69 @@
 // pure functions of state (plus their own imperative sub-widgets).
 import { el, clear } from "./dom";
 import { api } from "./api";
-import type { Settings, Stats, WatchLog } from "./types";
+import { initCatalog } from "./format-ui";
+import type {
+  FilmListEntry,
+  FilmPage,
+  FormatCatalog,
+  RatingBoard,
+  Settings,
+  Stats,
+  WatchLog,
+} from "./types";
 import { renderLogs } from "./views/logs";
 import { renderAdd } from "./views/add";
 import { renderEdit } from "./views/edit";
 import { renderStats } from "./views/stats";
 import { renderSettings } from "./views/settings";
+import { renderFilms } from "./views/films";
+import { renderFilm } from "./views/film";
 
-export type View = "logs" | "add" | "edit" | "stats" | "settings";
+export type View = "logs" | "films" | "film" | "add" | "edit" | "stats" | "settings";
 
 interface State {
   view: View;
   editId: number | null;
+  filmId: string | null;
   logs: WatchLog[];
+  films: FilmListEntry[];
   settings: Settings;
+  ratingBoards: RatingBoard[];
   stats: Stats | null;
+  catalog: FormatCatalog | null;
+  filmPage: FilmPage | null;
 }
 
 const state: State = {
   view: "logs",
   editId: null,
+  filmId: null,
   logs: [],
-  settings: { selected_board: "mpa" },
+  films: [],
+  settings: { selected_board: "US" },
+  ratingBoards: [],
   stats: null,
+  catalog: null,
+  filmPage: null,
 };
 
 export function getState(): State {
   return state;
 }
 
-// Refresh `logs`, `settings`, and `stats` from the store.
+// Refresh `logs`, `films`, `settings`, `ratingBoards`, and `stats` from the store.
 export async function reload(): Promise<void> {
-  const [logs, settings, stats] = await Promise.all([
+  const [logs, films, settings, boards, stats] = await Promise.all([
     api.listLogs(),
+    api.listFilms(),
     api.getSettings(),
+    api.ratingBoards(),
     api.getStats(),
   ]);
   state.logs = logs;
+  state.films = films;
   state.settings = settings;
+  state.ratingBoards = boards;
   state.stats = stats;
 }
 
@@ -49,16 +74,37 @@ export function rerender(): void {
   render();
 }
 
-// Change the active view. `editId` is only meaningful for the `edit` view.
-export function go(view: View, editId?: number): void {
+// Change the active view. A number target is an edit id; a string target is
+// a film id.
+export function go(view: View, target?: number | string): void {
   state.view = view;
-  state.editId = editId ?? null;
+  state.editId = typeof target === "number" ? target : null;
+  state.filmId = typeof target === "string" ? target : null;
+  if (view !== "film") state.filmPage = null;
   render();
+  if (view === "film" && state.filmId !== null) {
+    void loadFilmPage(state.filmId);
+  }
+}
+
+async function loadFilmPage(filmId: string): Promise<void> {
+  try {
+    const page = await api.getFilmPage(filmId);
+    if (state.view === "film" && state.filmId === filmId) {
+      state.filmPage = page;
+      render();
+    }
+  } catch (e) {
+    showError(e);
+  }
 }
 
 export async function init(): Promise<void> {
   let failure: unknown;
   try {
+    const catalog = await api.formatCatalog();
+    state.catalog = catalog;
+    initCatalog(catalog);
     await reload();
   } catch (e) {
     failure = e;
@@ -83,6 +129,10 @@ function renderView(content: HTMLElement): void {
   switch (state.view) {
     case "logs":
       return renderLogs(content);
+    case "films":
+      return renderFilms(content);
+    case "film":
+      return renderFilm(content);
     case "add":
       return renderAdd(content);
     case "edit":
@@ -97,6 +147,7 @@ function renderView(content: HTMLElement): void {
 function nav(): HTMLElement {
   const tabs: [View, string][] = [
     ["logs", "Logs"],
+    ["films", "Films"],
     ["add", "Add"],
     ["stats", "Stats"],
     ["settings", "Settings"],
@@ -109,7 +160,7 @@ function nav(): HTMLElement {
       el(
         "button",
         {
-          class: state.view === view ? "tab active" : "tab",
+          class: state.view === view || (view === "films" && state.view === "film") ? "tab active" : "tab",
           onclick: () => go(view),
         },
         label

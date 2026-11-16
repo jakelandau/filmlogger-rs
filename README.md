@@ -8,16 +8,18 @@ Three products live here:
 
 | # | Product | Location | Status |
 |---|---------|----------|--------|
-| 1 | Core library (Rust) | `crates/film-logger` | **this work** |
-| 2 | Desktop app (Windows / Linux) | `apps/desktop` (planned) | — |
-| 3 | Android native app | `apps/android` (planned) | — |
+| 1 | Core library (Rust) | `crates/film-logger` | Stable |
+| 2 | Desktop app (Windows / Linux) | `apps/desktop` | Stable |
+| 3 | Android native app | `apps/android` | Stable |
 
 The core library (`film-logger`) records each film you watch — **when**
 (device-local wall time translated to UTC via the device's current timezone),
 **where** (theatre or home), and other details (notes, denormalized film
 metadata). Films are identified by **IMDB ID** (e.g. `tt0137523`), falling back
-to the TMDB numeric ID when a film has no IMDB ID. It is async (tokio/reqwest)
-and platform-agnostic so the desktop and Android apps can consume it directly.
+to the TMDB numeric ID when a film has no IMDB ID. Its TMDB client is a
+blocking `reqwest` client, so every app calls it from a worker thread; it is
+platform-agnostic, and the desktop and Android apps consume it directly (the
+Android app through a `uniffi` bridge).
 
 ## Quickstart (product 1: `crates/film-logger`)
 

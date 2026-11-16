@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -32,7 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import ca.jakelandau.filmlogger.R
 import coil.compose.AsyncImage
 import java.time.Instant
 import java.time.ZoneOffset
@@ -113,31 +117,49 @@ fun LogsView(
     var year by remember { mutableStateOf<Int?>(null) }
     var rating by remember { mutableStateOf<Rating?>(null) }
     var sort by remember { mutableStateOf(LogSort.RECENT) }
+    var filtersExpanded by remember { mutableStateOf(false) }
+    val filtersActive = venue != null || rating != null
 
     val years = logs.map { utcYear(it) }.distinct().sortedDescending()
     val visible = filterLogs(logs, text, venue, year, rating, sort)
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search logs") },
-                singleLine = true,
-            )
-            Spacer(Modifier.height(10.dp))
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilterChip(selected = venue == null, onClick = { venue = null }, label = { Text("All venues") })
-                FilterChip(selected = venue == Venue.THEATRE, onClick = { venue = Venue.THEATRE }, label = { Text("Theatre") })
-                FilterChip(selected = venue == Venue.HOME, onClick = { venue = Venue.HOME }, label = { Text("Home") })
-                FilterChip(selected = rating == null, onClick = { rating = null }, label = { Text("Any rating") })
-                FilterChip(selected = rating == Rating.UP, onClick = { rating = Rating.UP }, label = { Text("👍 Up") })
-                FilterChip(selected = rating == Rating.DOWN, onClick = { rating = Rating.DOWN }, label = { Text("👎 Down") })
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Search logs") },
+                    singleLine = true,
+                )
+                Spacer(Modifier.width(8.dp))
+                IconButton(onClick = { filtersExpanded = !filtersExpanded }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_filter),
+                        contentDescription = if (filtersExpanded) "Hide filters" else "Show filters",
+                        tint = if (filtersActive) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+            }
+            if (filtersExpanded) {
+                Spacer(Modifier.height(10.dp))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(selected = venue == null, onClick = { venue = null }, label = { Text("All venues") })
+                    FilterChip(selected = venue == Venue.THEATRE, onClick = { venue = Venue.THEATRE }, label = { Text("Theatre") })
+                    FilterChip(selected = venue == Venue.HOME, onClick = { venue = Venue.HOME }, label = { Text("Home") })
+                    FilterChip(selected = rating == null, onClick = { rating = null }, label = { Text("Any rating") })
+                    FilterChip(selected = rating == Rating.UP, onClick = { rating = Rating.UP }, label = { Text("👍 Up") })
+                    FilterChip(selected = rating == Rating.DOWN, onClick = { rating = Rating.DOWN }, label = { Text("👎 Down") })
+                }
             }
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

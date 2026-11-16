@@ -143,7 +143,7 @@ fun MainScreen() {
         editingLog != null -> "Edit viewing"
         filmId != null -> "Film"
         tab == TABS_ADD -> "Add film"
-        tab == TABS_LOGS -> "Logs"
+        tab == TABS_LOGS -> "FilmLogger"
         tab == TABS_FILMS -> "Films"
         tab == TABS_STATS -> "Stats"
         else -> "Settings"

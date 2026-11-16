@@ -4,23 +4,25 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write
+
 env:
   TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
 jobs:
-  bundle:
+  desktop:
     name: Desktop bundle (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - os: windows-latest
             bundles: nsis
           - os: ubuntu-latest
-            bundles: deb,appimage
-          - os: macos-latest
-            bundles: dmg
+            bundles: appimage
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,6 +36,11 @@ jobs:
         run: npm ci --prefix apps/desktop/ui
       - name: Build UI
         run: npm run build --prefix apps/desktop/ui
+      - name: Set desktop version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          node -e "const fs=require('fs');const p='apps/desktop/src-tauri/tauri.conf.json';const c=JSON.parse(fs.readFileSync(p));c.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n')" "$VERSION"
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Install Tauri system libraries
@@ -41,12 +48,71 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - name: Build bundle
-        working-directory: apps/desktop/src-tauri
-        run: cargo tauri build --bundles ${{ matrix.bundles }}
-      - name: Upload installers
-        uses: actions/upload-artifact@v4
+      - name: Build and attach desktop release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          name: filmlogger-${{ matrix.os }}
-          path: target/release/bundle/
-          if-no-files-found: error
+          projectPath: apps/desktop/src-tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: FilmLogger ${{ github.ref_name }}
+          releaseBody: "FilmLogger ${{ github.ref_name }}. See the asset list for platform downloads."
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --bundles ${{ matrix.bundles }}
+
+  android:
+    name: Signed Android release APK
+    needs: desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Decode Android signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/filmlogger-release.keystore"
+      - name: Assemble signed release APK
+        working-directory: apps/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/filmlogger-release.keystore
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew \
+            -Dorg.gradle.java.home="$JAVA_HOME" \
+            assembleRelease \
+            -PtmdbApiKey="$TMDB_API_KEY" \
+            -PcargoBin="$(command -v cargo)" \
+            -PndkRoot="$ANDROID_NDK_LATEST_HOME" \
+            -PappVersionName="${GITHUB_REF_NAME#v}" \
+            -PappVersionCode="${{ github.run_number }}"
+      - name: Verify and stage APK
+        run: |
+          APK="apps/android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)"
+          "$APKSIGNER" verify --print-certs "$APK"
+          cp "$APK" "filmlogger-${GITHUB_REF_NAME}-android.apk"
+      - name: Attach APK to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: filmlogger-${{ github.ref_name }}-android.apk
+          generate_release_notes: true

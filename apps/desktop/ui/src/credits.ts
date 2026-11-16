@@ -29,9 +29,13 @@ export const CREDIT_GROUPS: CreditGroup[] = [
     items: [
       { name: "Tauri", license: "MIT OR Apache-2.0" },
       { name: "tauri-plugin-dialog", license: "MIT OR Apache-2.0" },
+      { name: "tauri-plugin-updater", license: "MIT OR Apache-2.0" },
+      { name: "tauri-plugin-process", license: "MIT OR Apache-2.0" },
       { name: "tauri-build", license: "MIT OR Apache-2.0" },
       { name: "@tauri-apps/api", license: "MIT OR Apache-2.0" },
       { name: "@tauri-apps/plugin-dialog", license: "MIT OR Apache-2.0" },
+      { name: "@tauri-apps/plugin-updater", license: "MIT OR Apache-2.0" },
+      { name: "@tauri-apps/plugin-process", license: "MIT OR Apache-2.0" },
       { name: "Vite", license: "MIT" },
       { name: "TypeScript", license: "Apache-2.0" },
       { name: "Vitest", license: "MIT" },

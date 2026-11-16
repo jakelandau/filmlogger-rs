@@ -29,7 +29,12 @@ example `## [0.1.0] - 2026-11-15`.
   and presentation flag.
 - Native desktop database import/export dialogs and backup-based export/import.
 - CI for the Rust core, desktop UI, and Android APK, plus tagged-release
-  installer builds for Windows, Linux, and macOS.
+  installer builds for Windows and Linux and a signed Android release APK.
+- Automatic update checks on launch, plus manual “Check for Updates” buttons
+  on desktop and Android. Releases publish Tauri updater signatures and
+  `latest.json`; Android downloads the release APK and opens the installer.
+- Signing and release documentation, including the required Actions secrets.
+- Third-party license inventory in `THIRD_PARTY.md`.
 - Settings licenses/credits section and TMDB attribution.
 - Film-strip icon for the Films navigation item.
 - `CHANGELOG.md` for release-to-release change tracking.

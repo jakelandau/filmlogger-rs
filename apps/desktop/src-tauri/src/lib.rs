@@ -285,6 +285,8 @@ fn format_catalog() -> FormatCatalog {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         // The app is always dark, including the window chrome.
         .on_page_load(|webview, _| {
             let _ = webview.window().set_theme(Some(tauri::Theme::Dark));

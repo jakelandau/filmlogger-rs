@@ -35,6 +35,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENFOTIzRDY3NUExNkNGMjUKUldRbHp4WmFaejJTemp6amovaURpVGlrRXFlZ3lYQ1dvRTVtZ093NUNuY2E0VmxxNm1BT1ljTHUK",
+      "endpoints": [
+        "https://github.com/jakelandau/filmlogger-rs/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

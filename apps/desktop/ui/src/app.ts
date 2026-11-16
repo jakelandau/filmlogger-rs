@@ -5,6 +5,7 @@ import { el, clear } from "./dom";
 import { api } from "./api";
 import { initCatalog } from "./format-ui";
 import { icon } from "./icons";
+import { checkForUpdates } from "./updates";
 import type {
   FilmListEntry,
   FilmPage,
@@ -114,6 +115,7 @@ export async function init(): Promise<void> {
   if (failure !== undefined) {
     showError(failure);
   }
+  void checkForUpdates(true);
 }
 
 function render(): void {

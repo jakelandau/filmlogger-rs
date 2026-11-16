@@ -70,6 +70,8 @@ fun SettingsView(
     var busy by remember { mutableStateOf(false) }
     var boardExpanded by remember { mutableStateOf(false) }
     var showLicenses by remember { mutableStateOf(false) }
+    var updateBusy by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf<String?>(null) }
 
     suspend fun loadSettings() {
         settings = try {
@@ -229,6 +231,38 @@ fun SettingsView(
         }
         Spacer(Modifier.height(24.dp))
 
+        Text("Updates", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = {
+                updateBusy = true
+                scope.launch {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching { Updater.checkAndInstall(context) }
+                            .getOrElse { Updater.Result(it.message ?: "Update check failed") }
+                    }
+                    updateStatus = result.message
+                    updateBusy = false
+                }
+            },
+            enabled = !updateBusy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                if (updateBusy) "Checking…" else "Check for Updates",
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        updateStatus?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        Spacer(Modifier.height(24.dp))
         Text("TMDB", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
         Surface(

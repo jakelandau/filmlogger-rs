@@ -89,6 +89,7 @@ jobs:
         run: |
           ./gradlew \
             -Dorg.gradle.java.home="$JAVA_HOME" \
+            testDebugUnitTest \
             assembleDebug \
             -PtmdbApiKey="$TMDB_API_KEY" \
             -PcargoBin="$(command -v cargo)" \

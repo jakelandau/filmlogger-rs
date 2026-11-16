@@ -23,9 +23,13 @@ internal val CREDIT_GROUPS = listOf(
         listOf(
             Credit("Tauri", "MIT OR Apache-2.0"),
             Credit("tauri-plugin-dialog", "MIT OR Apache-2.0"),
+            Credit("tauri-plugin-updater", "MIT OR Apache-2.0"),
+            Credit("tauri-plugin-process", "MIT OR Apache-2.0"),
             Credit("tauri-build", "MIT OR Apache-2.0"),
             Credit("@tauri-apps/api", "MIT OR Apache-2.0"),
             Credit("@tauri-apps/plugin-dialog", "MIT OR Apache-2.0"),
+            Credit("@tauri-apps/plugin-updater", "MIT OR Apache-2.0"),
+            Credit("@tauri-apps/plugin-process", "MIT OR Apache-2.0"),
             Credit("Vite", "MIT"),
             Credit("TypeScript", "Apache-2.0"),
             Credit("Vitest", "MIT"),
@@ -42,6 +46,7 @@ internal val CREDIT_GROUPS = listOf(
             Credit("Coil Compose / Coil SVG", "Apache-2.0"),
             Credit("JNA", "Apache-2.0 OR LGPL-2.1"),
             Credit("UniFFI", "MPL-2.0"),
+            Credit("JUnit 4 (test-only)", "EPL-1.0"),
         ),
     ),
     CreditGroup(

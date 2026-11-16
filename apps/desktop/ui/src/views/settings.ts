@@ -5,6 +5,7 @@ import { el } from "../dom";
 import { api } from "../api";
 import { getState, reload, rerender, showError } from "../app";
 import { CREDIT_GROUPS, TMDB_ATTRIBUTION } from "../credits";
+import { checkForUpdates } from "../updates";
 
 const DB_FILTERS = [{ name: "SQLite database", extensions: ["db"] }];
 
@@ -82,6 +83,29 @@ export function renderSettings(content: HTMLElement): void {
     "Import…"
   );
   content.append(el("div", { class: "io-row" }, importBtn));
+
+  content.append(el("h3", {}, "Updates"));
+  const updateStatus = el("p", { class: "muted" });
+  const updateBtn = el(
+    "button",
+    {
+      class: "btn",
+      onclick: async () => {
+        updateBtn.disabled = true;
+        updateStatus.textContent = "Checking for updates…";
+        try {
+          updateStatus.textContent = await checkForUpdates(false);
+        } catch (e) {
+          updateStatus.textContent = "Update check failed.";
+          showError(e);
+        } finally {
+          updateBtn.disabled = false;
+        }
+      },
+    },
+    "Check for Updates"
+  );
+  content.append(el("div", { class: "io-row" }, updateBtn), updateStatus);
 
   content.append(el("h3", {}, "Licenses / credits"));
   content.append(

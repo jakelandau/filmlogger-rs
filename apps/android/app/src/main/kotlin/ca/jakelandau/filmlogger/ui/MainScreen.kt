@@ -117,6 +117,12 @@ fun MainScreen() {
     }
 
     LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            runCatching { Updater.checkAndInstall(context) }
+        }
+    }
+
+    LaunchedEffect(Unit) {
         try {
             val db = File(context.filesDir, "film_logger.db")
             val opened = withContext(Dispatchers.IO) { Logger.open(db.absolutePath) }

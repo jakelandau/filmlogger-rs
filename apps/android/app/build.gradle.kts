@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,8 +14,8 @@ android {
         applicationId = "ca.jakelandau.filmlogger"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.gradleProperty("appVersionCode").orElse("1").get().toInt()
+        versionName = providers.gradleProperty("appVersionName").orElse("0.1.0").get()
         ndk {
             // The Rust cdylib is arm64-only; keep the JNA AAR's other ABIs
             // (and their `libjnidispatch.so`) out of the APK.
@@ -21,8 +23,45 @@ android {
         }
     }
 
+    val signingProperties = Properties().apply {
+        val path = System.getenv("ANDROID_SIGNING_PROPERTIES")
+            ?: "${System.getProperty("user.home")}/.filmlogger/release-signing.properties"
+        val file = file(path)
+        if (file.exists()) {
+            file.inputStream().use { load(it) }
+        }
+    }
+    val releaseStoreFile = System.getenv("ANDROID_KEYSTORE_PATH")
+        ?: signingProperties.getProperty("storeFile")
+    val releaseStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+        ?: signingProperties.getProperty("storePassword")
+    val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+        ?: signingProperties.getProperty("keyAlias")
+    val releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+        ?: signingProperties.getProperty("keyPassword")
+    val hasReleaseSigning = listOf(
+        releaseStoreFile,
+        releaseStorePassword,
+        releaseKeyAlias,
+        releaseKeyPassword,
+    ).all { !it.isNullOrBlank() }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -75,6 +114,7 @@ dependencies {
     // `System.loadLibrary("jnidispatch")` can find it on Android.
     implementation("net.java.dev.jna:jna:5.14.0@aar")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation("junit:junit:4.13.2")
 }
 
 // =====================================================================
@@ -89,7 +129,13 @@ dependencies {
 val androidDir: File = rootDir
 val rustDir: File = androidDir.resolve("rust")
 val workspaceTarget: File = androidDir.parentFile.parentFile.resolve("target")
-val hostCdylib: File = workspaceTarget.resolve("debug/film_logger_ffi.dll")
+val hostCdylib: File = workspaceTarget.resolve(
+    if (System.getProperty("os.name").startsWith("Windows")) {
+        "debug/film_logger_ffi.dll"
+    } else {
+        "debug/libfilm_logger_ffi.so"
+    },
+)
 val armCdylib: File = workspaceTarget.resolve("aarch64-linux-android/release/libfilm_logger_ffi.so")
 val generatedKotlinDir: File = file("src/main/kotlin")
 val generatedJniLibs: File = file("build/generated/jniLibs")

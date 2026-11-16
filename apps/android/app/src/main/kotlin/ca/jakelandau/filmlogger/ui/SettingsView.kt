@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -29,9 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -235,6 +238,15 @@ fun SettingsView(
         Spacer(Modifier.height(24.dp))
         Text("TMDB", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
+        AsyncImage(
+            model = "file:///android_asset/tmdb-logo.svg",
+            contentDescription = "The Movie Database (TMDB)",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .width(220.dp)
+                .height(18.dp),
+        )
+        Spacer(Modifier.height(8.dp))
         Text(
             TMDB_ATTRIBUTION,
             style = MaterialTheme.typography.bodyMedium,

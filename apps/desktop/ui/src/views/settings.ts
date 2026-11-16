@@ -101,6 +101,13 @@ export function renderSettings(content: HTMLElement): void {
   }
 
   content.append(el("h3", {}, "TMDB"));
+  content.append(
+    el("img", {
+      class: "tmdb-logo",
+      src: "/tmdb-logo.svg",
+      alt: "The Movie Database (TMDB)",
+    })
+  );
   content.append(el("p", { class: "muted" }, TMDB_ATTRIBUTION));
   content.append(
     el(

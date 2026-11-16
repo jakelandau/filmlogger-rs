@@ -1,6 +1,7 @@
 package ca.jakelandau.filmlogger.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +47,6 @@ private val CardPadding = 16.dp
 private val PosterGap = 16.dp
 private val RowGap = 6.dp
 private val InlineGap = 6.dp
-private val ActionGap = 12.dp
 
 private fun utcMillis(log: WatchLog): Long = Instant.parse(log.watchedAt).toEpochMilli()
 
@@ -230,23 +230,34 @@ private fun LogRow(
                 }
                 Spacer(Modifier.width(PosterGap))
                 Column(Modifier.weight(1f)) {
-                    // Row 1: identity and venue.
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(InlineGap),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            title,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        if (log.rewatch) {
+                    // Row 1: identity, rewatch state, and the sole card action.
+                    Row(verticalAlignment = Alignment.Top) {
+                        FlowRow(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(InlineGap),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
                             Text(
-                                "Rewatch",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
+                                title,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
+                            if (log.rewatch) {
+                                Text(
+                                    "Rewatch",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
+                        Text(
+                            "Edit",
+                            modifier = Modifier
+                                .clickable(onClick = onEdit)
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                     Spacer(Modifier.height(2.dp))
                     FlowRow(
@@ -305,14 +316,6 @@ private fun LogRow(
                         }
                     }
                 }
-            }
-            Spacer(Modifier.height(ActionGap))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onEdit) { Text("Edit", style = MaterialTheme.typography.labelLarge) }
             }
         }
     }

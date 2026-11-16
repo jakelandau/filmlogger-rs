@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -252,8 +253,16 @@ fun SettingsView(
                 )
                 TextButton(
                     onClick = { uriHandler.openUri("https://www.themoviedb.org/") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
                 ) {
-                    Text("themoviedb.org", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "themoviedb.org",
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
                 }
             }
         }

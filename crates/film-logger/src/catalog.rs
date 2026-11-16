@@ -207,8 +207,8 @@ fn all_screens() -> Vec<(ScreenClass, &'static str)> {
         (ScreenClass::Vip, "VIP"),
         (ScreenClass::FourDx, "4DX"),
         (ScreenClass::ScreenX, "ScreenX"),
-        (ScreenClass::ImaxClassic, "IMAX 1.43:1"),
-        (ScreenClass::ImaxRetrofit, "IMAX 1.90:1"),
+        (ScreenClass::ImaxClassic, "1.43:1"),
+        (ScreenClass::ImaxRetrofit, "1.90:1"),
         (ScreenClass::Ultra4Dx, "Ultra 4DX"),
     ]
 }
@@ -365,8 +365,8 @@ fn screen_label(screen: &ScreenClass) -> String {
         ScreenClass::Vip => "VIP",
         ScreenClass::FourDx => "4DX",
         ScreenClass::ScreenX => "ScreenX",
-        ScreenClass::ImaxClassic => "IMAX 1.43:1",
-        ScreenClass::ImaxRetrofit => "IMAX 1.90:1",
+        ScreenClass::ImaxClassic => "1.43:1",
+        ScreenClass::ImaxRetrofit => "1.90:1",
         ScreenClass::Ultra4Dx => "Ultra 4DX",
         ScreenClass::Custom(id) => id,
     }
@@ -579,7 +579,7 @@ mod tests {
         );
         assert_eq!(
             format_for("imax", "4k_dual_laser", "imax_class", true, true, false).summary(),
-            "4K dual laser · IMAX 1.43:1"
+            "4K dual laser · 1.43:1"
         );
         assert_eq!(
             Format::Home {

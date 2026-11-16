@@ -111,6 +111,25 @@ fun FilmView(
                         CertificationLine(film.certifications, selectedBoard)
                     }
                 }
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { mutate { logger.setFavorite(film.filmId, !film.favorite) } },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(
+                            if (film.favorite) "★ Favorite" else "☆ Favorite",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                    Button(
+                        onClick = { onLogAnother(film) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Log viewing", style = MaterialTheme.typography.labelLarge) }
+                }
                 film.tagline?.let {
                     Spacer(Modifier.height(12.dp))
                     Text(
@@ -142,30 +161,11 @@ fun FilmView(
                     )
                 }
 
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(16.dp))
                 OutlinedButton(
-                    onClick = { mutate { logger.setFavorite(film.filmId, !film.favorite) } },
+                    onClick = { mutate { logger.refreshFilm(film.filmId) } },
                     modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        if (film.favorite) "★ Favorite" else "☆ Favorite",
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = { mutate { logger.refreshFilm(film.filmId) } },
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Refresh", style = MaterialTheme.typography.labelLarge) }
-                    Button(
-                        onClick = { onLogAnother(film) },
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Log viewing", style = MaterialTheme.typography.labelLarge) }
-                }
+                ) { Text("Refresh Metadata", style = MaterialTheme.typography.labelLarge) }
                 Spacer(Modifier.height(18.dp))
                 val stats = page.stats
                 Surface(

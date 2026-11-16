@@ -23,10 +23,6 @@ object Updater {
         val current = currentVersion(context)
         val release = fetchLatestRelease()
         val tag = release.optString("tag_name").removePrefix("v")
-        if (tag.isBlank() || !isNewer(tag, current)) {
-            return Result("FilmLogger is up to date (v$current).")
-        }
-
         val assetsJson = release.optJSONArray("assets") ?: return Result("No release assets found.")
         val assets = buildList {
             for (index in 0 until assetsJson.length()) {
@@ -39,12 +35,34 @@ object Updater {
                 )
             }
         }
+        return updateFromRelease(
+            tag = tag,
+            assets = assets,
+            current = current,
+            cacheDir = context.cacheDir,
+            download = ::download,
+            install = { install(context, it) },
+        )
+    }
+
+    /** Testable release step: select, download, then start the APK installer. */
+    internal fun updateFromRelease(
+        tag: String,
+        assets: List<ReleaseAsset>,
+        current: String,
+        cacheDir: File,
+        download: (String, File) -> Unit,
+        install: (File) -> Unit,
+    ): Result {
+        if (tag.isBlank() || !UpdateLogic.isNewer(tag, current)) {
+            return Result("FilmLogger is up to date (v$current).")
+        }
         val asset = UpdateLogic.selectApkAsset(assets)
             ?: return Result("The latest release has no Android APK.")
 
-        val apk = File(context.cacheDir, "filmlogger-update.apk")
+        val apk = File(cacheDir, "filmlogger-update.apk")
         download(asset.url, apk)
-        install(context, apk)
+        install(apk)
         return Result("Downloaded v$tag. Opening the Android installer…", updateStarted = true)
     }
 

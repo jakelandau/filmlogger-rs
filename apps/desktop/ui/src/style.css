@@ -109,7 +109,7 @@ h3 {
 .log-main {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   flex: 1;
   min-width: 0;
 }
@@ -120,6 +120,13 @@ h3 {
 
 .log-sub {
   color: var(--muted);
+  font-size: 13px;
+}
+
+.log-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 13px;
 }
 

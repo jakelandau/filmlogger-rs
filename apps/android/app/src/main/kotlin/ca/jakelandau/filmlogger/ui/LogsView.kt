@@ -41,6 +41,13 @@ import uniffi.film_logger_ffi.WatchLog
 
 private enum class LogSort { RECENT, OLDEST, TITLE }
 
+// Density-independent spacing keeps the card rhythm stable across devices.
+private val CardPadding = 16.dp
+private val PosterGap = 16.dp
+private val RowGap = 6.dp
+private val InlineGap = 6.dp
+private val ActionGap = 12.dp
+
 private fun utcMillis(log: WatchLog): Long = Instant.parse(log.watchedAt).toEpochMilli()
 
 private fun utcYear(log: WatchLog): Int =
@@ -194,6 +201,7 @@ private fun filmKey(log: WatchLog): String = when (val id = log.filmId) {
     is uniffi.film_logger_ffi.FilmId.Tmdb -> "tmdb:${id.id}"
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LogRow(
     log: WatchLog,
@@ -211,7 +219,7 @@ private fun LogRow(
         color = MaterialTheme.colorScheme.surfaceVariant,
         shape = MaterialTheme.shapes.large,
     ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(CardPadding)) {
             Row(verticalAlignment = Alignment.Top) {
                 val poster = posterUrl(log.posterPath)
                 if (poster != null) {
@@ -232,20 +240,54 @@ private fun LogRow(
                             .background(MaterialTheme.colorScheme.surface),
                     )
                 }
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(PosterGap))
                 Column(Modifier.weight(1f)) {
+                    // Row 1: identity and venue.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(InlineGap),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            venueText(log.venue),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (log.rewatch) {
+                            Text(
+                                "Rewatch",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(2.dp))
                     Text(
-                        title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "${TimeUtils.display(log.watchedAt, zone)} · ${venueText(log.venue)}",
-                        style = MaterialTheme.typography.bodyMedium,
+                        TimeUtils.display(log.watchedAt, zone),
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(6.dp))
+
+                    // Row 2: format information.
+                    Spacer(Modifier.height(RowGap))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(InlineGap),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        FormatFamilyBadge(log.format)
+                        Text(
+                            log.formatSummary.ifEmpty { "—" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+
+                    // Row 3: content rating and reaction.
+                    Spacer(Modifier.height(RowGap))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (cert != null) {
                             CertificationIcon(selectedBoard, cert)
@@ -256,35 +298,18 @@ private fun LogRow(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        FormatFamilyBadge(log.format)
-                        if (log.format != null) Spacer(Modifier.width(6.dp))
-                        Text(
-                            log.formatSummary.ifEmpty { "—" },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
                         log.rating?.let { rating ->
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(12.dp))
                             Text(
                                 ratingText(rating),
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                        }
-                        if (log.rewatch) {
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Rewatch",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(ActionGap))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -315,6 +340,6 @@ private fun venueText(venue: Venue): String = when (venue) {
 }
 
 private fun ratingText(rating: Rating): String = when (rating) {
-    Rating.UP -> "👍"
-    Rating.DOWN -> "👎"
+    Rating.UP -> "👍 Liked"
+    Rating.DOWN -> "👎 Disliked"
 }

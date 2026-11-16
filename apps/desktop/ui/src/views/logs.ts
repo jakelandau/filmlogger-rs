@@ -162,7 +162,8 @@ function certificationBadge(region: string, cert: string | null): HTMLElement {
 }
 
 function renderRow(log: WatchLog): HTMLElement {
-  const rating = log.rating === "up" ? "👍" : log.rating === "down" ? "👎" : null;
+  const rating =
+    log.rating === "up" ? "👍 Liked" : log.rating === "down" ? "👎 Disliked" : null;
   const board = getState().settings.selected_board;
   const cert = certificationFor(log, board);
   const venue = log.venue === "theatre" ? "🎭 Theatre" : "🏠 Home";
@@ -192,8 +193,6 @@ function renderRow(log: WatchLog): HTMLElement {
         log.title,
         log.release_year != null ? el("span", { class: "dim" }, ` (${log.release_year})`) : "",
         el("span", { class: "badge venue-" + log.venue }, venue),
-        rating ? el("span", { class: "rating" }, " " + rating) : "",
-        certificationBadge(board, cert),
         log.rewatch ? el("span", { class: "badge rewatch" }, " rewatch") : ""
       ),
       el(
@@ -204,6 +203,12 @@ function renderRow(log: WatchLog): HTMLElement {
         family,
         family ? " " : "",
         el("span", { class: "dim" }, log.format_summary || "—")
+      ),
+      el(
+        "div",
+        { class: "log-meta" },
+        certificationBadge(board, cert),
+        rating ? el("span", { class: "rating" }, rating) : ""
       )
     ),
     actions

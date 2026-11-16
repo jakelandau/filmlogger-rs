@@ -16,14 +16,14 @@ import androidx.compose.ui.unit.dp
 fun FormatFamilyBadge(format: uniffi.film_logger_ffi.Format?) {
     val family = formatFamily(format) ?: return
     val background = when (family) {
-        "IMAX" -> Color(0xFF4A3B1F)
-        "DCI" -> Color(0xFF243642)
+        "IMAX" -> Color(0xFF243642)
+        "DCI" -> Color(0xFF4A3B1F)
         "FILM" -> Color(0xFF3B2A25)
         else -> MaterialTheme.colorScheme.surface
     }
     val foreground = when (family) {
-        "IMAX" -> Color(0xFFE7C873)
-        "DCI" -> Color(0xFF8FC4E8)
+        "IMAX" -> Color(0xFF8FC4E8)
+        "DCI" -> Color(0xFFE7C873)
         "FILM" -> Color(0xFFD9A48A)
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }

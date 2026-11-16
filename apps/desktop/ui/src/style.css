@@ -135,13 +135,13 @@ h3 {
 }
 
 .format-family.imax {
-  background: #4a3b1f;
-  color: #e7c873;
+  background: #243642;
+  color: #8fc4e8;
 }
 
 .format-family.dci {
-  background: #243642;
-  color: #8fc4e8;
+  background: #4a3b1f;
+  color: #e7c873;
 }
 
 .format-family.film {

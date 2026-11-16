@@ -6,6 +6,7 @@ import { getState, go, reload, showError } from "../app";
 import { formatDisplay } from "../time";
 import { startAddForFilm } from "./add";
 import { certificationIcon } from "../cert-icons";
+import { formatFamilyBadge } from "../format-family";
 import type { Certifications, FilmPage } from "../types";
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
@@ -183,8 +184,9 @@ function renderHistory(page: FilmPage): HTMLElement {
     el(
       "ul",
       { class: "log-list" },
-      ...page.logs.map((log) =>
-        el(
+      ...page.logs.map((log) => {
+        const family = formatFamilyBadge(log.format);
+        return el(
           "li",
           { class: "log-row" },
           el(
@@ -200,11 +202,13 @@ function renderHistory(page: FilmPage): HTMLElement {
             el(
               "div",
               { class: "log-sub" },
+              family,
+              family ? " " : "",
               el("span", { class: "dim" }, log.format_summary || "—")
             )
           )
-        )
-      )
+        );
+      })
     )
   );
 }

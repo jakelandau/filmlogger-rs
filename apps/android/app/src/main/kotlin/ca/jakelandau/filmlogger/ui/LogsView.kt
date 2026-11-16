@@ -259,6 +259,8 @@ private fun LogRow(
                     }
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        FormatFamilyBadge(log.format)
+                        if (log.format != null) Spacer(Modifier.width(6.dp))
                         Text(
                             log.formatSummary.ifEmpty { "—" },
                             style = MaterialTheme.typography.bodyMedium,

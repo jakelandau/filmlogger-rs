@@ -4,6 +4,7 @@ import { el } from "../dom";
 import { api } from "../api";
 import { getState, go, reload, showError } from "../app";
 import { formatDisplay } from "../time";
+import { formatFamilyBadge } from "../format-family";
 import { applyFilter, defaultFilter, type LogFilter } from "../filters";
 import { certificationIcon } from "../cert-icons";
 import type { WatchLog } from "../types";
@@ -168,6 +169,7 @@ function renderRow(log: WatchLog): HTMLElement {
   const poster = log.poster_path
     ? el("img", { class: "poster", src: IMAGE_BASE + log.poster_path, alt: "" })
     : el("div", { class: "poster placeholder" });
+  const family = formatFamilyBadge(log.format);
 
   const actions = el(
     "span",
@@ -198,7 +200,10 @@ function renderRow(log: WatchLog): HTMLElement {
         "div",
         { class: "log-sub" },
         el("span", { class: "dim" }, formatDisplay(log.watched_at, log.timezone)),
-        el("span", { class: "dim" }, " · " + (log.format_summary || "—"))
+        el("span", { class: "dim" }, " · "),
+        family,
+        family ? " " : "",
+        el("span", { class: "dim" }, log.format_summary || "—")
       )
     ),
     actions

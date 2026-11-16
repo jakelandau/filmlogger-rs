@@ -9,6 +9,17 @@ import uniffi.film_logger_ffi.Projection
 import uniffi.film_logger_ffi.ScreenClass
 import uniffi.film_logger_ffi.Venue
 
+/** Display label for the projection family; `null` when no format is stored. */
+fun formatFamily(format: Format?): String? = when (format) {
+    null -> null
+    is Format.Home -> "HOME"
+    is Format.Theatre -> when (format.projection) {
+        is Projection.Dci -> "DCI"
+        is Projection.Imax -> "IMAX"
+        is Projection.Film -> "FILM"
+    }
+}
+
 /**
  * The format-selection state, flattened to string keys so the catalog-driven
  * picker can be built from and decomposed to the FFI [`Format`] enum tree.

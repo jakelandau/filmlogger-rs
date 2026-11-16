@@ -227,11 +227,15 @@ fun FilmView(
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        log.formatSummary.ifEmpty { "—" },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        FormatFamilyBadge(log.format)
+                        if (log.format != null) Spacer(Modifier.width(6.dp))
+                        Text(
+                            log.formatSummary.ifEmpty { "—" },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     log.rating?.let {
                         Spacer(Modifier.height(4.dp))
                         Text(

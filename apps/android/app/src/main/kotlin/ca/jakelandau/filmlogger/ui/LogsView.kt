@@ -252,11 +252,6 @@ private fun LogRow(
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface,
                         )
-                        Text(
-                            venueText(log.venue),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                         if (log.rewatch) {
                             Text(
                                 "Rewatch",
@@ -266,11 +261,21 @@ private fun LogRow(
                         }
                     }
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        TimeUtils.display(log.watchedAt, zone),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(InlineGap),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            TimeUtils.display(log.watchedAt, zone),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            venueText(log.venue),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
 
                     // Row 2: format information.
                     Spacer(Modifier.height(RowGap))

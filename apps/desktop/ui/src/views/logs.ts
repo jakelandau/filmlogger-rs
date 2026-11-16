@@ -192,13 +192,14 @@ function renderRow(log: WatchLog): HTMLElement {
         { class: "log-title" },
         log.title,
         log.release_year != null ? el("span", { class: "dim" }, ` (${log.release_year})`) : "",
-        el("span", { class: "badge venue-" + log.venue }, venue),
         log.rewatch ? el("span", { class: "badge rewatch" }, " rewatch") : ""
       ),
       el(
         "div",
         { class: "log-sub" },
         el("span", { class: "dim" }, formatDisplay(log.watched_at, log.timezone)),
+        el("span", { class: "dim" }, " · "),
+        el("span", { class: "badge venue-" + log.venue }, venue),
         el("span", { class: "dim" }, " · "),
         family,
         family ? " " : "",

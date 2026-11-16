@@ -823,3 +823,11 @@ select {
   color: var(--accent);
   font-weight: 600;
 }
+
+.tmdb-result {
+  cursor: default;
+}
+
+.tmdb-result.clickable {
+  cursor: pointer;
+}

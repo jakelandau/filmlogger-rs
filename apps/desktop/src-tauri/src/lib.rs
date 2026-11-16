@@ -252,6 +252,24 @@ async fn get_collection(
     run_blocking(&state, move |logger| logger.collection(collection_id)).await
 }
 
+/// Fetch and store a TMDB film without logging a viewing.
+#[tauri::command]
+async fn ensure_film(
+    state: tauri::State<'_, AppState>,
+    tmdb_id: i64,
+) -> Result<FilmMetadata, String> {
+    run_blocking(&state, move |logger| logger.ensure_film(tmdb_id)).await
+}
+
+/// Add a TMDB film to the bucket list, storing it if needed.
+#[tauri::command]
+async fn add_to_watchlist(
+    state: tauri::State<'_, AppState>,
+    tmdb_id: i64,
+) -> Result<FilmMetadata, String> {
+    run_blocking(&state, move |logger| logger.add_to_watchlist(tmdb_id)).await
+}
+
 /// The viewing-format catalog.
 #[tauri::command]
 fn format_catalog() -> FormatCatalog {
@@ -302,6 +320,8 @@ pub fn run() {
             get_film_page,
             set_favorite,
             get_collection,
+            ensure_film,
+            add_to_watchlist,
             format_catalog
         ])
         .run(tauri::generate_context!())

@@ -371,6 +371,67 @@ impl Logger {
         Ok(collection.into())
     }
 
+    /// Fetch and store a TMDB film without logging a viewing.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns TMDB or store errors.
+    pub fn ensure_film(&self, tmdb_id: i64) -> Result<FilmMetadata, LoggerError> {
+        let film = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .ensure_film(tmdb_id)
+            .map_err(LoggerError::from)?;
+        Ok(film.into())
+    }
+
+    /// Add a TMDB film to the watchlist, storing it if needed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns TMDB or store errors.
+    pub fn add_to_watchlist(&self, tmdb_id: i64) -> Result<FilmMetadata, LoggerError> {
+        let film = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .add_to_watchlist(tmdb_id)
+            .map_err(LoggerError::from)?;
+        Ok(film.into())
+    }
+
+    /// Put a stored film on (or remove it from) the watchlist.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LoggerError::FilmNotFound`] if the film is not stored.
+    pub fn set_watchlisted(
+        &self,
+        film_id: FilmId,
+        watchlisted: bool,
+    ) -> Result<FilmMetadata, LoggerError> {
+        let film = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .set_watchlisted(&film_id.into(), watchlisted)
+            .map_err(LoggerError::from)?;
+        Ok(film.into())
+    }
+
     /// One film's page: metadata, history, and statistics.
     ///
     /// # Panics

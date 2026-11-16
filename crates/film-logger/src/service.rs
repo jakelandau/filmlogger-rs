@@ -183,6 +183,49 @@ impl FilmLogger {
         self.client.collection(collection_id)
     }
 
+    /// Fetch and store a TMDB film without logging a viewing, returning its
+    /// stored metadata. Used when opening an unseen collection entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns TMDB or store errors.
+    pub fn ensure_film(&self, tmdb_id: i64) -> Result<FilmMetadata, Error> {
+        let movie = self.client.movie(tmdb_id)?;
+        let metadata = FilmMetadata::from_movie(&movie);
+        self.store.upsert_film(&metadata)?;
+        self.store
+            .get_film(&metadata.film_id)?
+            .ok_or(Error::FilmNotFound)
+    }
+
+    /// Add a TMDB film to the watchlist, storing its metadata if needed.
+    ///
+    /// # Errors
+    ///
+    /// Returns TMDB or store errors.
+    pub fn add_to_watchlist(&self, tmdb_id: i64) -> Result<FilmMetadata, Error> {
+        let film = self.ensure_film(tmdb_id)?;
+        self.store.set_watchlisted(&film.film_id, true)?;
+        self.store
+            .get_film(&film.film_id)?
+            .ok_or(Error::FilmNotFound)
+    }
+
+    /// Put a stored film on (or remove it from) the watchlist.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FilmNotFound`] if the film is not stored, otherwise
+    /// store errors.
+    pub fn set_watchlisted(
+        &self,
+        film_id: &FilmId,
+        watchlisted: bool,
+    ) -> Result<FilmMetadata, Error> {
+        self.store.set_watchlisted(film_id, watchlisted)?;
+        self.store.get_film(film_id)?.ok_or(Error::FilmNotFound)
+    }
+
     /// One film's page: metadata, viewing history, and statistics.
     ///
     /// # Errors

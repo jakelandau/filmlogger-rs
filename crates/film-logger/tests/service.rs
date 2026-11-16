@@ -359,3 +359,21 @@ fn log_film_rejects_unknown_film() {
         .unwrap_err();
     assert!(matches!(err, Error::FilmNotFound));
 }
+
+#[test]
+fn add_to_watchlist_stores_without_a_viewing() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("watch_log.db");
+    let server = start_tmdb("Fight Club");
+    let logger = logger_at(&db, &server);
+
+    let film = logger.add_to_watchlist(550).unwrap();
+    assert!(film.watchlisted);
+    assert_eq!(film.title, "Fight Club");
+
+    let films = logger.films().unwrap();
+    assert_eq!(films.len(), 1);
+    assert_eq!(films[0].viewings, 0);
+    assert!(films[0].film.watchlisted);
+    assert_eq!(films[0].film.film_id, FilmId::Imdb("tt0137523".to_owned()));
+}

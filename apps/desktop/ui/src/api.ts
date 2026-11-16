@@ -49,6 +49,9 @@ export const api = {
   getFilmPage: (filmId: string) => invoke<FilmPage>("get_film_page", { filmId }),
   getCollection: (collectionId: number) =>
     invoke<Collection>("get_collection", { collectionId }),
+  ensureFilm: (tmdbId: number) => invoke<FilmMetadata>("ensure_film", { tmdbId }),
+  addToWatchlist: (tmdbId: number) =>
+    invoke<FilmMetadata>("add_to_watchlist", { tmdbId }),
   setFavorite: (filmId: string, favorite: boolean) =>
     invoke<FilmMetadata>("set_favorite", { filmId, favorite }),
   formatCatalog: () => invoke<FormatCatalog>("format_catalog"),

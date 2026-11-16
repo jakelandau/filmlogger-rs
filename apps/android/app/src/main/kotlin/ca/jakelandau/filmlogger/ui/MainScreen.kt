@@ -332,6 +332,21 @@ fun MainScreen() {
                                     logger = l,
                                     films = films,
                                     onOpen = { entry -> openFilm(filmKeyOf(entry)) },
+                                    onOpenTmdb = { tmdbId ->
+                                        scope.launch {
+                                            try {
+                                                val film = withContext(Dispatchers.IO) {
+                                                    l.ensureFilm(tmdbId)
+                                                }
+                                                refresh()
+                                                openFilm(filmKeyOf(film))
+                                            } catch (t: Throwable) {
+                                                status = t.message ?: t.toString()
+                                            }
+                                        }
+                                    },
+                                    onRefresh = { refresh() },
+                                    onError = { status = it },
                                 )
 
                             TABS_ADD ->
@@ -364,7 +379,10 @@ fun MainScreen() {
 }
 
 /** A library entry's storage key. */
-fun filmKeyOf(entry: FilmListEntry): String = when (val id = entry.film.filmId) {
+fun filmKeyOf(entry: FilmListEntry): String = filmKeyOf(entry.film)
+
+/** A film's storage key. */
+fun filmKeyOf(film: FilmMetadata): String = when (val id = film.filmId) {
     is FilmId.Imdb -> id.id
     is FilmId.Tmdb -> "tmdb:${id.id}"
 }

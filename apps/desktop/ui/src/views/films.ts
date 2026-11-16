@@ -2,15 +2,19 @@
 // by favorites and searchable by title.
 import { el } from "../dom";
 import { api } from "../api";
-import { getState, go } from "../app";
+import { getState, go, reload, showError } from "../app";
 import { formatDisplay } from "../time";
-import type { Collection, FilmListEntry } from "../types";
+import type { Collection, FilmListEntry, MovieSummary, SearchPage } from "../types";
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w92";
 
-type Tab = "all" | "favorites" | "collections";
+type Tab = "all" | "favorites" | "bucket" | "collections";
 let tab: Tab = "all";
 let search = "";
+let tmdbResults: SearchPage | null = null;
+let searchedQuery = "";
+let searchBusy = false;
+let addingTmdb: number | null = null;
 const collectionCache = new Map<number, Collection>();
 const collectionLoading = new Set<number>();
 const collectionFailed = new Set<number>();
@@ -19,18 +23,6 @@ export function renderFilms(content: HTMLElement): void {
   const films = getState().films;
   content.append(renderControls());
 
-  if (films.length === 0) {
-    content.append(
-      el(
-        "p",
-        { class: "empty" },
-        "No films yet. ",
-        el("button", { class: "link", onclick: () => go("add") }, "Add your first film")
-      )
-    );
-    return;
-  }
-
   if (tab === "collections") {
     renderCollections(content, search);
     return;
@@ -38,19 +30,152 @@ export function renderFilms(content: HTMLElement): void {
 
   const needle = search.trim().toLowerCase();
   const visible = films.filter((entry) => {
-    if (tab === "favorites" && !entry.film.favorite) return false;
+    const isListed = entry.viewings > 0 || entry.film.watchlisted;
+    if (tab === "all" && !isListed) return false;
+    if (tab === "favorites" && (!entry.film.favorite || !isListed)) return false;
+    if (tab === "bucket" && (!entry.film.watchlisted || entry.viewings > 0)) return false;
     if (needle === "") return true;
     return entry.film.title.toLowerCase().includes(needle);
   });
 
-  if (visible.length === 0) {
-    content.append(el("p", { class: "empty" }, "No films match this filter."));
-    return;
+  const libraryByTmdb = new Map(
+    films
+      .filter((entry) => entry.film.tmdb_id != null)
+      .map((entry) => [entry.film.tmdb_id as number, entry])
+  );
+  const list = el("div", { class: "film-grid" });
+
+  if (tmdbResults != null) {
+    list.append(el("h3", {}, `TMDB results for “${searchedQuery}”`));
+    if (tmdbResults.results.length === 0) {
+      list.append(el("p", { class: "empty" }, "No TMDB results."));
+    }
+    for (const result of tmdbResults.results) {
+      list.append(renderTmdbResult(result, libraryByTmdb.get(result.id)));
+    }
+    if (tmdbResults.page < tmdbResults.total_pages) {
+      list.append(
+        el(
+          "button",
+          {
+            class: "btn load-more",
+            disabled: searchBusy,
+            onclick: () => void searchTmdb(tmdbResults!.page + 1),
+          },
+          searchBusy ? "Loading…" : "Load more"
+        )
+      );
+    }
+    if (visible.length > 0) list.append(el("h3", {}, "In your library"));
   }
 
-  const list = el("div", { class: "film-grid" });
-  for (const entry of visible) list.append(renderRow(entry));
+  if (visible.length > 0) {
+    for (const entry of visible) list.append(renderRow(entry));
+  } else if (tmdbResults == null) {
+    list.append(
+      el(
+        "p",
+        { class: "empty" },
+        films.length === 0 ? "No films yet. " : "No films match this filter. ",
+        films.length === 0
+          ? el("button", { class: "link", onclick: () => go("add") }, "Add your first film")
+          : ""
+      )
+    );
+  } else {
+    list.append(el("p", { class: "empty" }, "No local matches."));
+  }
+
   content.append(list);
+}
+
+async function searchTmdb(page = 1): Promise<void> {
+  const query = search.trim();
+  if (query === "") return;
+  searchBusy = true;
+  renderAgain();
+  try {
+    const next = await api.searchMovies(query, page);
+    tmdbResults =
+      page === 1
+        ? next
+        : {
+            ...next,
+            results: [...(tmdbResults?.results ?? []), ...next.results],
+          };
+    searchedQuery = query;
+  } catch (e) {
+    showError(e);
+  } finally {
+    searchBusy = false;
+    renderAgain();
+  }
+}
+
+async function addToBucketList(tmdbId: number): Promise<void> {
+  if (addingTmdb != null) return;
+  addingTmdb = tmdbId;
+  renderAgain();
+  try {
+    await api.addToWatchlist(tmdbId);
+    await reload();
+  } catch (e) {
+    showError(e);
+  } finally {
+    addingTmdb = null;
+    renderAgain();
+  }
+}
+
+function renderTmdbResult(result: MovieSummary, entry: FilmListEntry | undefined): HTMLElement {
+  const seen = (entry?.viewings ?? 0) > 0;
+  const onBucketList = entry?.film.watchlisted === true;
+  const status = seen
+    ? "Seen"
+    : onBucketList
+    ? "On Bucket List"
+    : entry != null
+    ? "In library"
+    : "Not in library";
+  const poster = result.poster_path
+    ? el("img", { class: "poster", src: IMAGE_BASE + result.poster_path, alt: "" })
+    : el("div", { class: "poster placeholder" });
+  const row = el(
+    "div",
+    { class: "film-row tmdb-result" + (entry != null ? " clickable" : "") },
+    poster,
+    el(
+      "div",
+      { class: "film-main" },
+      el(
+        "div",
+        { class: "film-title" },
+        result.title,
+        result.release_date != null
+          ? el("span", { class: "dim" }, ` (${result.release_date.slice(0, 4)})`)
+          : ""
+      ),
+      el("div", { class: "log-sub" }, status)
+    ),
+    !seen && !onBucketList
+      ? el(
+          "button",
+          {
+            class: "btn",
+            disabled: addingTmdb === result.id,
+            onclick: (e: Event) => {
+              e.stopPropagation();
+              void addToBucketList(result.id);
+            },
+          },
+          addingTmdb === result.id ? "Adding…" : "Bucket List"
+        )
+      : ""
+  );
+  if (entry != null) {
+    row.addEventListener("click", () => go("film", entry.film.film_id));
+  }
+  return row;
 }
 
 function ensureCollection(id: number): void {
@@ -117,6 +242,16 @@ function renderCollections(content: HTMLElement, query: string): void {
   content.append(list);
 }
 
+async function openCollectionPart(tmdbId: number): Promise<void> {
+  try {
+    const film = await api.ensureFilm(tmdbId);
+    await reload();
+    go("film", film.film_id);
+  } catch (e) {
+    showError(e);
+  }
+}
+
 function renderCollection(collection: Collection): HTMLElement {
   const parts = [...collection.parts].sort(
     (a, b) =>
@@ -143,7 +278,7 @@ function renderCollection(collection: Collection): HTMLElement {
     const seen = (entry?.viewings ?? 0) > 0;
     const row = el(
       "div",
-      { class: "collection-part" + (entry ? " clickable" : "") },
+      { class: "collection-part clickable" },
       el("span", { class: "collection-mark" + (seen ? " seen" : "") }, seen ? "✓" : "○"),
       el(
         "span",
@@ -153,9 +288,13 @@ function renderCollection(collection: Collection): HTMLElement {
       ),
       el("span", { class: "collection-status" + (seen ? " seen" : "") }, seen ? "Seen" : "Not seen")
     );
-    if (entry != null) {
-      row.addEventListener("click", () => go("film", entry.film.film_id));
-    }
+    row.addEventListener("click", () => {
+      if (entry != null) {
+        go("film", entry.film.film_id);
+      } else {
+        void openCollectionPart(part.tmdb_id);
+      }
+    });
     rows.append(row);
   }
 
@@ -191,6 +330,7 @@ function renderControls(): HTMLElement {
   const tabs: [Tab, string][] = [
     ["all", "All"],
     ["favorites", "Favorites"],
+    ["bucket", "Bucket List"],
     ["collections", "Collections"],
   ];
   const chips = el("div", { class: "filter-bar" });
@@ -217,9 +357,21 @@ function renderControls(): HTMLElement {
       value: search,
       oninput: (e: Event) => {
         search = (e.currentTarget as HTMLInputElement).value;
+        if (search.trim() !== searchedQuery) tmdbResults = null;
         renderAgain();
       },
     })
+  );
+  chips.append(
+    el(
+      "button",
+      {
+        class: "btn",
+        disabled: searchBusy || search.trim() === "",
+        onclick: () => void searchTmdb(1),
+      },
+      searchBusy ? "Searching…" : "Search TMDB"
+    )
   );
   return chips;
 }

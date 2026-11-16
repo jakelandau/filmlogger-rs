@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,11 +23,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,25 +37,38 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import uniffi.film_logger_ffi.Collection
 import uniffi.film_logger_ffi.CollectionPart
 import uniffi.film_logger_ffi.FilmListEntry
 import uniffi.film_logger_ffi.Logger
+import uniffi.film_logger_ffi.LoggerException
+import uniffi.film_logger_ffi.MovieSummary
+import uniffi.film_logger_ffi.SearchPage
 
-private enum class FilmTab { ALL, FAVORITES, COLLECTIONS }
+private enum class FilmTab { ALL, FAVORITES, BUCKET_LIST, COLLECTIONS }
 
 /** The film library: every stored film, filterable and searchable. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FilmsView(
     logger: Logger,
     films: List<FilmListEntry>,
     onOpen: (FilmListEntry) -> Unit,
+    onOpenTmdb: (Long) -> Unit,
+    onRefresh: () -> Unit,
+    onError: (String) -> Unit,
 ) {
     var tab by remember { mutableStateOf(FilmTab.ALL) }
     var search by remember { mutableStateOf("") }
     var collections by remember { mutableStateOf<Map<Long, Collection>>(emptyMap()) }
     var loadingCollections by remember { mutableStateOf(false) }
+    var tmdbResults by remember { mutableStateOf<SearchPage?>(null) }
+    var searchedQuery by remember { mutableStateOf("") }
+    var searchBusy by remember { mutableStateOf(false) }
+    var addingTmdb by remember { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
 
     val collectionIds = films.mapNotNull { it.film.collection?.id }.distinct()
     LaunchedEffect(collectionIds, tab) {
@@ -71,11 +88,55 @@ fun FilmsView(
         }
     }
 
+    fun searchTmdb(page: Int = 1) {
+        val query = search.trim()
+        if (query.isEmpty()) return
+        searchBusy = true
+        scope.launch {
+            try {
+                val next = withContext(Dispatchers.IO) { logger.search(query, page) }
+                tmdbResults = if (page == 1) {
+                    next
+                } else {
+                    SearchPage(
+                        next.page,
+                        (tmdbResults?.results ?: emptyList()) + next.results,
+                        next.totalPages,
+                        next.totalResults,
+                    )
+                }
+                searchedQuery = query
+            } catch (e: LoggerException) {
+                onError(e.message ?: "search failed")
+            } finally {
+                searchBusy = false
+            }
+        }
+    }
+
+    fun addToBucketList(tmdbId: Long) {
+        if (addingTmdb != null) return
+        addingTmdb = tmdbId
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { logger.addToWatchlist(tmdbId) }
+                onRefresh()
+            } catch (e: LoggerException) {
+                onError(e.message ?: "bucket list update failed")
+            } finally {
+                addingTmdb = null
+            }
+        }
+    }
+
     val needle = search.trim().lowercase()
     val visible = films.filter { entry ->
+        val isListed = entry.viewings > 0u || entry.film.watchlisted
         when (tab) {
-            FilmTab.ALL, FilmTab.COLLECTIONS -> true
-            FilmTab.FAVORITES -> entry.film.favorite
+            FilmTab.ALL -> isListed
+            FilmTab.FAVORITES -> entry.film.favorite && isListed
+            FilmTab.BUCKET_LIST -> entry.film.watchlisted && entry.viewings == 0u
+            FilmTab.COLLECTIONS -> true
         } &&
             (needle.isEmpty() ||
                 entry.film.title.lowercase().contains(needle))
@@ -87,13 +148,19 @@ fun FilmsView(
         ) {
             OutlinedTextField(
                 value = search,
-                onValueChange = { search = it },
+                onValueChange = {
+                    search = it
+                    if (it.trim() != searchedQuery) tmdbResults = null
+                },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Search films") },
                 singleLine = true,
             )
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 FilterChip(
                     selected = tab == FilmTab.ALL,
                     onClick = { tab = FilmTab.ALL },
@@ -105,31 +172,29 @@ fun FilmsView(
                     label = { Text("Favorites") },
                 )
                 FilterChip(
+                    selected = tab == FilmTab.BUCKET_LIST,
+                    onClick = { tab = FilmTab.BUCKET_LIST },
+                    label = { Text("Bucket List") },
+                )
+                FilterChip(
                     selected = tab == FilmTab.COLLECTIONS,
                     onClick = { tab = FilmTab.COLLECTIONS },
                     label = { Text("Collections") },
                 )
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(
+                    onClick = { searchTmdb(1) },
+                    enabled = search.isNotBlank() && !searchBusy,
+                ) {
+                    Text(if (searchBusy) "Searching…" else "Search TMDB")
+                }
+            }
         }
 
-        if (films.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text("No films yet", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Add a film from the Add tab to build your library.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            return@Column
-        }
         if (tab == FilmTab.COLLECTIONS) {
             CollectionsList(
                 films = films,
@@ -137,35 +202,171 @@ fun FilmsView(
                 loading = loadingCollections,
                 search = needle,
                 onOpen = onOpen,
+                onOpenTmdb = onOpenTmdb,
             )
             return@Column
         }
 
-        if (visible.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text("No matching films", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Try a different search or filter.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            return@Column
-        }
+        val libraryByTmdb = films
+            .mapNotNull { entry -> entry.film.tmdbId?.let { it to entry } }
+            .toMap()
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(visible) { entry -> FilmRow(entry, onClick = { onOpen(entry) }) }
+            tmdbResults?.let { page ->
+                item {
+                    Text(
+                        "TMDB results for “$searchedQuery”",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                if (page.results.isEmpty()) {
+                    item {
+                        Text(
+                            "No TMDB results.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(page.results) { result ->
+                    TmdbResultRow(
+                        result = result,
+                        entry = libraryByTmdb[result.id],
+                        adding = addingTmdb == result.id,
+                        onAdd = { addToBucketList(result.id) },
+                        onOpen = { entry -> onOpen(entry) },
+                    )
+                }
+                if (page.page < page.totalPages) {
+                    item {
+                        TextButton(
+                            onClick = { searchTmdb(page.page + 1) },
+                            enabled = !searchBusy,
+                        ) {
+                            Text(if (searchBusy) "Loading…" else "Load more")
+                        }
+                    }
+                }
+                if (visible.isNotEmpty()) {
+                    item {
+                        Text("In your library", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+            if (visible.isNotEmpty()) {
+                items(visible) { entry -> FilmRow(entry, onClick = { onOpen(entry) }) }
+            } else {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            when {
+                                films.isEmpty() -> "No films yet"
+                                tmdbResults != null -> "No local matches"
+                                else -> "No matching films"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        if (films.isEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Search TMDB or add a film from the Add tab.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+}
+
+@Composable
+private fun TmdbResultRow(
+    result: MovieSummary,
+    entry: FilmListEntry?,
+    adding: Boolean,
+    onAdd: () -> Unit,
+    onOpen: (FilmListEntry) -> Unit,
+) {
+    val seen = (entry?.viewings ?: 0u) > 0u
+    val onBucketList = entry?.film?.watchlisted == true
+    val status = when {
+        seen -> "Seen"
+        onBucketList -> "On Bucket List"
+        entry != null -> "In library"
+        else -> "Not in library"
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (entry != null) {
+                        Modifier.clickable { onOpen(entry) }
+                    } else {
+                        Modifier
+                    }
+                )
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val poster = posterUrl(result.posterPath)
+            if (poster != null) {
+                AsyncImage(
+                    model = poster,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(66.dp)
+                        .clip(RoundedCornerShape(5.dp)),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(66.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(MaterialTheme.colorScheme.surface),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                val year = yearFrom(result.releaseDate)
+                Text(
+                    if (year != null) "${result.title} ($year)" else result.title,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    status,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (onBucketList || seen) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            if (!seen && !onBucketList) {
+                TextButton(onClick = onAdd, enabled = !adding) {
+                    Text(if (adding) "Adding…" else "Bucket List")
+                }
+            }
         }
     }
 }
@@ -177,6 +378,7 @@ private fun CollectionsList(
     loading: Boolean,
     search: String,
     onOpen: (FilmListEntry) -> Unit,
+    onOpenTmdb: (Long) -> Unit,
 ) {
     val libraryByTmdb = remember(films) {
         films.mapNotNull { entry ->
@@ -225,7 +427,7 @@ private fun CollectionsList(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(filtered) { (_, collection) ->
-            CollectionCard(collection, libraryByTmdb, onOpen)
+            CollectionCard(collection, libraryByTmdb, onOpen, onOpenTmdb)
         }
     }
 }
@@ -235,6 +437,7 @@ private fun CollectionCard(
     collection: Collection,
     libraryByTmdb: Map<Long, FilmListEntry>,
     onOpen: (FilmListEntry) -> Unit,
+    onOpenTmdb: (Long) -> Unit,
 ) {
     val parts = collection.parts.sortedWith(
         compareBy<CollectionPart> { it.releaseYear ?: Int.MAX_VALUE }
@@ -297,13 +500,13 @@ private fun CollectionCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .then(
+                        .clickable {
                             if (entry != null) {
-                                Modifier.clickable { onOpen(entry) }
+                                onOpen(entry)
                             } else {
-                                Modifier
+                                onOpenTmdb(part.tmdbId)
                             }
-                        )
+                        }
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

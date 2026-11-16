@@ -305,6 +305,23 @@ impl Store {
         Ok(())
     }
 
+    /// Put a film on (or remove it from) the watchlist.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FilmNotFound`] if the film is not stored, otherwise
+    /// [`Error::Sqlite`].
+    pub fn set_watchlisted(&self, film_id: &FilmId, watchlisted: bool) -> Result<(), Error> {
+        let n = self.conn.execute(
+            "UPDATE films SET watchlisted = ?2 WHERE film_id = ?1",
+            params![film_id.key(), i64::from(watchlisted)],
+        )?;
+        if n == 0 {
+            return Err(Error::FilmNotFound);
+        }
+        Ok(())
+    }
+
     /// Aggregate statistics over all stored logs.
     ///
     /// # Errors

@@ -1,6 +1,7 @@
 package ca.jakelandau.filmlogger.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -66,7 +67,11 @@ fun FormatFields(
     format: Format?,
     onFormat: (Format) -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         RadioChoice(venue == Venue.THEATRE, { onVenue(Venue.THEATRE) }, "Theatre")
         Spacer(Modifier.width(16.dp))
         RadioChoice(venue == Venue.HOME, { onVenue(Venue.HOME) }, "Home")

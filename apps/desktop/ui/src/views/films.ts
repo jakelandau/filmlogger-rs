@@ -8,7 +8,7 @@ import type { Collection, FilmListEntry, MovieSummary, SearchPage } from "../typ
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w92";
 
-type Tab = "all" | "favorites" | "bucket" | "collections";
+type Tab = "all" | "seen" | "favorites" | "bucket" | "collections";
 let tab: Tab = "all";
 let search = "";
 let tmdbResults: SearchPage | null = null;
@@ -32,6 +32,7 @@ export function renderFilms(content: HTMLElement): void {
   const visible = films.filter((entry) => {
     const isListed = entry.viewings > 0 || entry.film.watchlisted;
     if (tab === "all" && !isListed) return false;
+    if (tab === "seen" && entry.viewings === 0) return false;
     if (tab === "favorites" && (!entry.film.favorite || !isListed)) return false;
     if (tab === "bucket" && (!entry.film.watchlisted || entry.viewings > 0)) return false;
     if (needle === "") return true;
@@ -329,6 +330,7 @@ function renderAgain(): void {
 function renderControls(): HTMLElement {
   const tabs: [Tab, string][] = [
     ["all", "All"],
+    ["seen", "Seen"],
     ["favorites", "Favorites"],
     ["bucket", "Bucket List"],
     ["collections", "Collections"],
@@ -366,7 +368,8 @@ function renderControls(): HTMLElement {
     el(
       "button",
       {
-        class: "btn",
+        class: "btn primary",
+        type: "button",
         disabled: searchBusy || search.trim() === "",
         onclick: () => void searchTmdb(1),
       },

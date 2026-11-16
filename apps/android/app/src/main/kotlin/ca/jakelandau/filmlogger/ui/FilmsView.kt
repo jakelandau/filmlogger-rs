@@ -18,12 +18,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,7 +51,7 @@ import uniffi.film_logger_ffi.LoggerException
 import uniffi.film_logger_ffi.MovieSummary
 import uniffi.film_logger_ffi.SearchPage
 
-private enum class FilmTab { ALL, FAVORITES, BUCKET_LIST, COLLECTIONS }
+private enum class FilmTab { ALL, SEEN, FAVORITES, BUCKET_LIST, COLLECTIONS }
 
 /** The film library: every stored film, filterable and searchable. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -134,6 +138,7 @@ fun FilmsView(
         val isListed = entry.viewings > 0u || entry.film.watchlisted
         when (tab) {
             FilmTab.ALL -> isListed
+            FilmTab.SEEN -> entry.viewings > 0u
             FilmTab.FAVORITES -> entry.film.favorite && isListed
             FilmTab.BUCKET_LIST -> entry.film.watchlisted && entry.viewings == 0u
             FilmTab.COLLECTIONS -> true
@@ -167,6 +172,11 @@ fun FilmsView(
                     label = { Text("All") },
                 )
                 FilterChip(
+                    selected = tab == FilmTab.SEEN,
+                    onClick = { tab = FilmTab.SEEN },
+                    label = { Text("Seen") },
+                )
+                FilterChip(
                     selected = tab == FilmTab.FAVORITES,
                     onClick = { tab = FilmTab.FAVORITES },
                     label = { Text("Favorites") },
@@ -186,10 +196,12 @@ fun FilmsView(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(
+                Button(
                     onClick = { searchTmdb(1) },
                     enabled = search.isNotBlank() && !searchBusy,
                 ) {
+                    Icon(Icons.Filled.Search, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
                     Text(if (searchBusy) "Searching…" else "Search TMDB")
                 }
             }

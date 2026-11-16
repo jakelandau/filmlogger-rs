@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -56,6 +57,7 @@ fun EditView(
     }
     var rating by remember { mutableStateOf(log.rating) }
     var busy by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     fun doSave() {
         val chosenRating = rating ?: run {
@@ -147,10 +149,47 @@ fun EditView(
         )
         Spacer(Modifier.height(12.dp))
 
-        TextButton(onClick = { doDelete() }, enabled = !busy) { Text("Delete") }
         OutlinedButton(onClick = { doSave() }, enabled = !busy && rating != null, modifier = Modifier.fillMaxWidth()) {
             Text("Save")
         }
         Spacer(Modifier.height(24.dp))
+        TextButton(
+            onClick = { showDeleteConfirm = true },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                "Delete viewing…",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) showDeleteConfirm = false },
+            title = { Text("Delete viewing?") },
+            text = {
+                Text("Delete “${log.title.ifBlank { "this viewing" }}” from the log? This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        doDelete()
+                    },
+                    enabled = !busy,
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }, enabled = !busy) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }

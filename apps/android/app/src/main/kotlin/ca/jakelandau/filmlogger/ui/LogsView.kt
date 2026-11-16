@@ -92,8 +92,6 @@ fun LogsView(
     selectedBoard: String,
     onEdit: (Long) -> Unit,
     onAdd: () -> Unit,
-    onDelete: (Long) -> Unit,
-    onOpenFilm: (String) -> Unit,
 ) {
     if (logs.isEmpty()) {
         Column(
@@ -186,19 +184,11 @@ fun LogsView(
                 LogRow(
                     log,
                     selectedBoard,
-                    onOpen = { onOpenFilm(filmKey(log)) },
                     onEdit = { onEdit(log.id) },
-                    onDelete = { onDelete(log.id) },
                 )
             }
         }
     }
-}
-
-/** The storage key of a log's film (`tt…` or `tmdb:…`). */
-private fun filmKey(log: WatchLog): String = when (val id = log.filmId) {
-    is uniffi.film_logger_ffi.FilmId.Imdb -> id.id
-    is uniffi.film_logger_ffi.FilmId.Tmdb -> "tmdb:${id.id}"
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -206,9 +196,7 @@ private fun filmKey(log: WatchLog): String = when (val id = log.filmId) {
 private fun LogRow(
     log: WatchLog,
     selectedBoard: String,
-    onOpen: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit,
 ) {
     val year = log.releaseYear
     val title = if (year != null) "${log.title} ($year)" else log.title
@@ -324,15 +312,7 @@ private fun LogRow(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onOpen) { Text("Film", style = MaterialTheme.typography.labelLarge) }
                 TextButton(onClick = onEdit) { Text("Edit", style = MaterialTheme.typography.labelLarge) }
-                TextButton(onClick = onDelete) {
-                    Text(
-                        "Delete",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
             }
         }
     }

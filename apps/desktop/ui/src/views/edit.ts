@@ -144,6 +144,32 @@ export function renderEdit(content: HTMLElement): void {
         el("button", { class: "btn", type: "button", onclick: () => go("logs") }, "Cancel")),
     )
   );
+  content.append(
+    el(
+      "div",
+      { class: "actions danger-zone" },
+      el(
+        "button",
+        { class: "btn danger", type: "button", onclick: () => void deleteCurrent() },
+        "Delete viewing…"
+      )
+    )
+  );
+}
+
+async function deleteCurrent(): Promise<void> {
+  const id = edit.id;
+  if (id == null) return;
+  const log = getState().logs.find((l) => l.id === id);
+  if (!log) return;
+  if (!confirm(`Delete “${log.title}”? This cannot be undone.`)) return;
+  try {
+    await api.deleteLog(id);
+    await reload();
+    go("logs");
+  } catch (e) {
+    showError(e);
+  }
 }
 
 function venueMatches(venue: Venue): boolean {

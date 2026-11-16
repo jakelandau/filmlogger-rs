@@ -1,8 +1,7 @@
 // The log list: every viewing, filterable and sortable, with edit/delete
 // actions. Format labels come from the stored `format_summary`.
 import { el } from "../dom";
-import { api } from "../api";
-import { getState, go, reload, showError } from "../app";
+import { getState, go } from "../app";
 import { formatDisplay } from "../time";
 import { formatFamilyBadge } from "../format-family";
 import { formatFlagsRow } from "../format-flags";
@@ -176,9 +175,7 @@ function renderRow(log: WatchLog): HTMLElement {
   const actions = el(
     "span",
     { class: "row-actions" },
-    el("button", { class: "btn", onclick: () => go("film", log.film_id) }, "Film"),
-    el("button", { class: "btn", onclick: () => go("edit", log.id) }, "Edit"),
-    el("button", { class: "btn danger", onclick: () => deleteLog(log) }, "Delete")
+    el("button", { class: "btn", onclick: () => go("edit", log.id) }, "Edit")
   );
 
   return el(
@@ -218,13 +215,4 @@ function renderRow(log: WatchLog): HTMLElement {
   );
 }
 
-async function deleteLog(log: WatchLog): Promise<void> {
-  if (!confirm(`Delete “${log.title}”?`)) return;
-  try {
-    await api.deleteLog(log.id);
-    await reload();
-    renderAgain();
-  } catch (e) {
-    showError(e);
-  }
-}
+

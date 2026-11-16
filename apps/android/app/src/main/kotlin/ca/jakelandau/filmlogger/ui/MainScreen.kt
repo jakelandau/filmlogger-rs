@@ -46,7 +46,6 @@ import uniffi.film_logger_ffi.FilmMetadata
 import uniffi.film_logger_ffi.FilmPage
 import uniffi.film_logger_ffi.FormatCatalog
 import uniffi.film_logger_ffi.Logger
-import uniffi.film_logger_ffi.LoggerException
 import uniffi.film_logger_ffi.RatingBoard
 import uniffi.film_logger_ffi.Stats
 import uniffi.film_logger_ffi.WatchLog
@@ -320,17 +319,6 @@ fun MainScreen() {
                                         editingId = id
                                     },
                                     onAdd = { tab = TABS_ADD },
-                                    onOpenFilm = { key -> openFilm(key) },
-                                    onDelete = { id ->
-                                        scope.launch {
-                                            try {
-                                                withContext(Dispatchers.IO) { l.delete(id) }
-                                                refresh()
-                                            } catch (e: LoggerException) {
-                                                status = e.message
-                                            }
-                                        }
-                                    },
                                 )
 
                             TABS_FILMS ->

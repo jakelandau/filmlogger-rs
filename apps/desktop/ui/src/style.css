@@ -457,6 +457,10 @@ input[type="text"] {
   margin-top: 8px;
 }
 
+.danger-zone {
+  margin-top: 28px;
+}
+
 /* Stats */
 .stat-cards {
   display: grid;

@@ -140,18 +140,18 @@ h3 {
 }
 
 .format-family.dci {
-  background: #4a3b1f;
-  color: #e7c873;
+  background: #1f3b31;
+  color: #8fe3c0;
 }
 
 .format-family.film {
-  background: #3b2a25;
-  color: #d9a48a;
+  background: #4a2a16;
+  color: #ffb27a;
 }
 
 .format-family.home {
-  background: var(--surface);
-  color: var(--muted);
+  background: #35254a;
+  color: #d9b8ff;
 }
 
 .badge {

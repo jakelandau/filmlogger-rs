@@ -17,15 +17,15 @@ fun FormatFamilyBadge(format: uniffi.film_logger_ffi.Format?) {
     val family = formatFamily(format) ?: return
     val background = when (family) {
         "IMAX" -> Color(0xFF243642)
-        "DCI" -> Color(0xFF4A3B1F)
-        "FILM" -> Color(0xFF3B2A25)
-        else -> MaterialTheme.colorScheme.surface
+        "DCI" -> Color(0xFF1F3B31)
+        "FILM" -> Color(0xFF4A2A16)
+        else -> Color(0xFF35254A)
     }
     val foreground = when (family) {
         "IMAX" -> Color(0xFF8FC4E8)
-        "DCI" -> Color(0xFFE7C873)
-        "FILM" -> Color(0xFFD9A48A)
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+        "DCI" -> Color(0xFF8FE3C0)
+        "FILM" -> Color(0xFFFFB27A)
+        else -> Color(0xFFD9B8FF)
     }
     Text(
         family,

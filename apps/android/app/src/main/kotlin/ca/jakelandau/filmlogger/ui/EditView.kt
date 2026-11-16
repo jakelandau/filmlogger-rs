@@ -109,7 +109,7 @@ fun EditView(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .imePadding()
-            .padding(16.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
     ) {
         Text(log.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.headlineSmall)
         val year = log.releaseYear

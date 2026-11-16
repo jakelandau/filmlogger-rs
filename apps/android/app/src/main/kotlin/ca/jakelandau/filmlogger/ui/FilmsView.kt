@@ -55,7 +55,9 @@ fun FilmsView(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(
+            Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+        ) {
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },

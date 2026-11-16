@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -23,7 +24,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ca.jakelandau.filmlogger.R
 import java.io.File
@@ -151,7 +150,6 @@ fun MainScreen() {
     }
     val showBack = editingLog != null || filmId != null || tab == TABS_ADD
     val showBottomBar = editingLog == null && filmId == null && tab != TABS_ADD
-    val logsHeader = editingLog == null && filmId == null && tab == TABS_LOGS
 
     fun selectTab(next: Int) {
         tab = next
@@ -179,17 +177,12 @@ fun MainScreen() {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
                     Text(
                         screenTitle,
-                        modifier = if (logsHeader) Modifier.fillMaxWidth() else Modifier,
-                        textAlign = if (logsHeader) TextAlign.Center else TextAlign.Start,
-                        style = if (logsHeader) {
-                            MaterialTheme.typography.headlineMedium
-                        } else {
-                            MaterialTheme.typography.titleLarge
-                        },
+                        style = MaterialTheme.typography.headlineMedium,
+                        maxLines = 1,
                     )
                 },
                 navigationIcon = {

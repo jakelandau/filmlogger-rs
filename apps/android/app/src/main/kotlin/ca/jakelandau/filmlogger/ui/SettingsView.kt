@@ -125,7 +125,7 @@ fun SettingsView(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
     ) {
         Text("Certification board", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))

@@ -7,11 +7,13 @@ import { formatFamilyBadge } from "../format-family";
 import { formatFlagsRow } from "../format-flags";
 import { applyFilter, defaultFilter, type LogFilter } from "../filters";
 import { certificationIcon } from "../cert-icons";
+import { icon } from "../icons";
 import type { WatchLog } from "../types";
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w92";
 
 let filter: LogFilter = { ...defaultFilter };
+let filtersExpanded = false;
 
 export function renderLogs(content: HTMLElement): void {
   const logs = getState().logs;
@@ -55,7 +57,7 @@ function renderFilterBar(): HTMLElement {
   const text = el("input", {
     class: "search",
     type: "text",
-    placeholder: "Filter by title…",
+    placeholder: "Search logs",
     value: filter.text,
     oninput: (e: Event) => {
       filter = { ...filter, text: (e.currentTarget as HTMLInputElement).value };
@@ -63,22 +65,21 @@ function renderFilterBar(): HTMLElement {
     },
   });
 
-  const venue = el(
-    "select",
+  const filterButton = el(
+    "button",
     {
-      onchange: (e: Event) => {
-        filter = {
-          ...filter,
-          venue: (e.currentTarget as HTMLSelectElement).value as LogFilter["venue"],
-        };
+      class:
+        "icon-button" +
+        (filtersExpanded || filter.venue !== "all" || filter.rating !== "all" ? " active" : ""),
+      title: "Filters",
+      "aria-label": "Filters",
+      onclick: () => {
+        filtersExpanded = !filtersExpanded;
         renderAgain();
       },
     },
-    el("option", { value: "all" }, "All venues"),
-    el("option", { value: "theatre" }, "Theatre"),
-    el("option", { value: "home" }, "Home")
+    icon("filter")
   );
-  venue.value = filter.venue;
 
   const year = el(
     "select",
@@ -93,23 +94,6 @@ function renderFilterBar(): HTMLElement {
     ...years.map((y) => el("option", { value: String(y) }, String(y)))
   );
   year.value = String(filter.year);
-
-  const rating = el(
-    "select",
-    {
-      onchange: (e: Event) => {
-        filter = {
-          ...filter,
-          rating: (e.currentTarget as HTMLSelectElement).value as LogFilter["rating"],
-        };
-        renderAgain();
-      },
-    },
-    el("option", { value: "all" }, "Any rating"),
-    el("option", { value: "up" }, "👍"),
-    el("option", { value: "down" }, "👎")
-  );
-  rating.value = filter.rating;
 
   const sort = el(
     "select",
@@ -129,7 +113,56 @@ function renderFilterBar(): HTMLElement {
   );
   sort.value = filter.sort;
 
-  return el("div", { class: "filter-bar" }, text, venue, year, rating, sort);
+  const venueChips = el("div", { class: "chips filter-chips" });
+  for (const [value, label] of [
+    ["all", "All venues"],
+    ["theatre", "Theatre"],
+    ["home", "Home"],
+  ] as const) {
+    venueChips.append(
+      el(
+        "button",
+        {
+          class: filter.venue === value ? "chip active" : "chip",
+          onclick: () => {
+            filter = { ...filter, venue: value };
+            renderAgain();
+          },
+        },
+        label
+      )
+    );
+  }
+
+  const ratingChips = el("div", { class: "chips filter-chips" });
+  for (const [value, label] of [
+    ["all", "Any rating"],
+    ["up", "👍 Up"],
+    ["down", "👎 Down"],
+  ] as const) {
+    ratingChips.append(
+      el(
+        "button",
+        {
+          class: filter.rating === value ? "chip active" : "chip",
+          onclick: () => {
+            filter = { ...filter, rating: value };
+            renderAgain();
+          },
+        },
+        label
+      )
+    );
+  }
+
+  const bar = el(
+    "div",
+    { class: "filter-bar logs-filter" },
+    el("div", { class: "filter-top" }, text, filterButton),
+    filtersExpanded ? el("div", { class: "filter-group" }, venueChips, ratingChips) : "",
+    el("div", { class: "filter-row" }, year, sort)
+  );
+  return bar;
 }
 
 /// The film's certification for the user's selected rating board, or null

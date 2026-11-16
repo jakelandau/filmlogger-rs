@@ -5,6 +5,7 @@ import { api } from "../api";
 import { getState, go, reload, showError } from "../app";
 import { formatDisplay } from "../time";
 import { formatFamilyBadge } from "../format-family";
+import { formatFlagsRow } from "../format-flags";
 import { applyFilter, defaultFilter, type LogFilter } from "../filters";
 import { certificationIcon } from "../cert-icons";
 import type { WatchLog } from "../types";
@@ -205,6 +206,7 @@ function renderRow(log: WatchLog): HTMLElement {
         family ? " " : "",
         el("span", { class: "dim" }, log.format_summary || "—")
       ),
+      formatFlagsRow(log.format),
       el(
         "div",
         { class: "log-meta" },

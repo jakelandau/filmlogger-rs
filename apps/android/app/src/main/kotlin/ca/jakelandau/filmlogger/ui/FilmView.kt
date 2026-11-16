@@ -236,6 +236,10 @@ fun FilmView(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    if (formatFlags(log.format).isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        FormatFlagsRow(log.format)
+                    }
                     log.rating?.let {
                         Spacer(Modifier.height(4.dp))
                         Text(

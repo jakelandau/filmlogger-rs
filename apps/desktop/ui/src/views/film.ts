@@ -7,6 +7,7 @@ import { formatDisplay } from "../time";
 import { startAddForFilm } from "./add";
 import { certificationIcon } from "../cert-icons";
 import { formatFamilyBadge } from "../format-family";
+import { formatFlagsRow } from "../format-flags";
 import type { Certifications, FilmPage } from "../types";
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
@@ -205,7 +206,8 @@ function renderHistory(page: FilmPage): HTMLElement {
               family,
               family ? " " : "",
               el("span", { class: "dim" }, log.format_summary || "—")
-            )
+            ),
+            formatFlagsRow(log.format)
           )
         );
       })

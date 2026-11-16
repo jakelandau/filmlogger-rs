@@ -290,6 +290,10 @@ private fun LogRow(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
+                    if (formatFlags(log.format).isNotEmpty()) {
+                        Spacer(Modifier.height(4.dp))
+                        FormatFlagsRow(log.format)
+                    }
 
                     // Row 3: content rating and reaction.
                     Spacer(Modifier.height(RowGap))

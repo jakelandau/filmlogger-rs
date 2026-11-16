@@ -6,13 +6,23 @@ export interface FormatFlag {
   label: string;
 }
 
-const FLAG_ICONS: Record<FormatFlag["key"], { d: string; stroke?: boolean }> = {
-  "3d": { d: "M2 9h7l3 3 3-3h7v6h-7l-3-3-3 3H2z" },
-  hfr: { d: "M13 2 4 14h6l-1 8 9-12h-6z" },
-  motion: {
-    d: "M2 9c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 5-2.5 7.5 0M2 15c2.5-2.5 5-2.5 7.5 0s5 2.5 7.5 0 5-2.5 7.5 0",
-    stroke: true,
-  },
+interface IconPath {
+  d: string;
+  stroke?: boolean;
+}
+
+const FLAG_ICONS: Record<FormatFlag["key"], IconPath[]> = {
+  "3d": [{ d: "M2 9h7l3 3 3-3h7v6h-7l-3-3-3 3H2z" }],
+  hfr: [
+    { d: "M3.5 14a8.5 8.5 0 0 1 17 0", stroke: true },
+    { d: "M12 14l4.5-6.5", stroke: true },
+    { d: "M12 13.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3z" },
+  ],
+  motion: [
+    { d: "M7 4h10a2 2 0 0 1 2 2v6H5V6a2 2 0 0 1 2-2z" },
+    { d: "M3 12h18v5H3z" },
+    { d: "M6 19h3v2H6zM15 19h3v2h-3z" },
+  ],
 };
 
 /** Theatre presentation flags, including 4DX-style motion seating. */
@@ -29,23 +39,24 @@ export function formatFlags(format: Format | null): FormatFlag[] {
 }
 
 function icon(key: FormatFlag["key"]): SVGSVGElement {
-  const spec = FLAG_ICONS[key];
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("class", "format-flag-icon");
   svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", spec.d);
-  if (spec.stroke) {
-    path.setAttribute("fill", "none");
-    path.setAttribute("stroke", "currentColor");
-    path.setAttribute("stroke-width", "1.8");
-    path.setAttribute("stroke-linecap", "round");
-    path.setAttribute("stroke-linejoin", "round");
-  } else {
-    path.setAttribute("fill", "currentColor");
+  for (const spec of FLAG_ICONS[key]) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", spec.d);
+    if (spec.stroke) {
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "currentColor");
+      path.setAttribute("stroke-width", "1.8");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+    } else {
+      path.setAttribute("fill", "currentColor");
+    }
+    svg.append(path);
   }
-  svg.append(path);
   return svg;
 }
 

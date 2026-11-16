@@ -390,37 +390,17 @@ fn medium_label(medium: &HomeMedium) -> String {
 }
 
 impl Format {
-    /// The one-line display summary of the format, e.g.
-    /// `"4K laser · PLF · 3D"` or `"Blu-ray"`.
+    /// The one-line display summary of the projection/medium and screen.
+    ///
+    /// Presentation flags are rendered separately as labelled pictographs.
     #[must_use]
     pub fn summary(&self) -> String {
         match self {
             Format::Theatre {
-                projection,
-                screen,
-                three_d,
-                hfr,
-                dbox,
-            } => {
-                let mut parts = vec![tech_label(projection), screen_label(screen)];
-                for (flag, on) in [("three_d", *three_d), ("hfr", *hfr), ("dbox", *dbox)] {
-                    if on {
-                        parts.push(flag_label(flag).to_owned());
-                    }
-                }
-                parts.join(" · ")
-            }
+                projection, screen, ..
+            } => [tech_label(projection), screen_label(screen)].join(" · "),
             Format::Home { medium } => medium_label(medium),
         }
-    }
-}
-
-/// The display label of a presentation flag key.
-fn flag_label(key: &str) -> &'static str {
-    match key {
-        "three_d" => "3D",
-        "hfr" => "HFR",
-        _ => "D-BOX",
     }
 }
 
@@ -595,11 +575,11 @@ mod tests {
         );
         assert_eq!(
             format_for("dci", "4k_laser", "plf", true, false, false).summary(),
-            "4K laser · PLF · 3D"
+            "4K laser · PLF"
         );
         assert_eq!(
             format_for("imax", "4k_dual_laser", "imax_class", true, true, false).summary(),
-            "4K dual laser · IMAX 1.43:1 · 3D · HFR"
+            "4K dual laser · IMAX 1.43:1"
         );
         assert_eq!(
             Format::Home {

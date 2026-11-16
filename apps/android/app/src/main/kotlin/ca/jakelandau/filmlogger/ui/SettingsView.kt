@@ -1,9 +1,12 @@
 package ca.jakelandau.filmlogger.ui
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,9 +20,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -62,6 +68,7 @@ fun SettingsView(
     var settings by remember { mutableStateOf<Settings?>(null) }
     var busy by remember { mutableStateOf(false) }
     var boardExpanded by remember { mutableStateOf(false) }
+    var showLicenses by remember { mutableStateOf(false) }
 
     suspend fun loadSettings() {
         settings = try {
@@ -74,6 +81,10 @@ fun SettingsView(
 
     LaunchedEffect(Unit) {
         loadSettings()
+    }
+
+    BackHandler(enabled = showLicenses) {
+        showLicenses = false
     }
 
     fun exportToUri(uri: Uri?) {
@@ -120,6 +131,11 @@ fun SettingsView(
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> importFromUri(uri) }
+
+    if (showLicenses) {
+        LicensesPage(onBack = { showLicenses = false })
+        return
+    }
 
     Column(
         modifier = Modifier
@@ -212,7 +228,79 @@ fun SettingsView(
         }
         Spacer(Modifier.height(24.dp))
 
-        Text("Licenses / credits", style = MaterialTheme.typography.titleLarge)
+        Text("TMDB", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(8.dp))
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                AsyncImage(
+                    model = "file:///android_asset/tmdb-logo.svg",
+                    contentDescription = "The Movie Database (TMDB)",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .width(220.dp)
+                        .height(18.dp),
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    TMDB_ATTRIBUTION,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(
+                    onClick = { uriHandler.openUri("https://www.themoviedb.org/") },
+                ) {
+                    Text("themoviedb.org", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showLicenses = true },
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Licenses & credits", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Third-party libraries and assets",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    "›",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun LicensesPage(onBack: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+    ) {
+        TextButton(onClick = onBack) {
+            Text("← Settings", style = MaterialTheme.typography.labelLarge)
+        }
+        Text("Licenses & credits", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(4.dp))
         Text(
             "FilmLogger is built with these third-party libraries. " +
@@ -220,40 +308,35 @@ fun SettingsView(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        for (group in CREDIT_GROUPS) {
-            Text(
-                group.title,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 10.dp),
-            )
-            for (credit in group.items) {
-                Text(
-                    "• ${credit.name} — ${credit.license}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        Spacer(Modifier.height(12.dp))
 
-        Spacer(Modifier.height(24.dp))
-        Text("TMDB", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(4.dp))
-        AsyncImage(
-            model = "file:///android_asset/tmdb-logo.svg",
-            contentDescription = "The Movie Database (TMDB)",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .width(220.dp)
-                .height(18.dp),
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            TMDB_ATTRIBUTION,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        TextButton(onClick = { uriHandler.openUri("https://www.themoviedb.org/") }) {
-            Text("themoviedb.org", style = MaterialTheme.typography.labelLarge)
+        for (group in CREDIT_GROUPS) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(group.title, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(6.dp))
+                    group.items.forEachIndexed { index, credit ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 6.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+                        Text(credit.name, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            credit.license,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
         }
+        Spacer(Modifier.height(12.dp))
     }
 }

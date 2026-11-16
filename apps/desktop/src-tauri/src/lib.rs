@@ -243,6 +243,21 @@ fn set_favorite(
         .map_err(|e| e.to_string())
 }
 
+/// Add a stored film to the bucket list (or remove it).
+#[tauri::command]
+fn set_watchlisted(
+    state: tauri::State<'_, AppState>,
+    film_id: String,
+    watchlisted: bool,
+) -> Result<FilmMetadata, String> {
+    state
+        .logger
+        .lock()
+        .map_err(|e| e.to_string())?
+        .set_watchlisted(&parse_film_id(&film_id)?, watchlisted)
+        .map_err(|e| e.to_string())
+}
+
 /// Fetch a TMDB collection and its films.
 #[tauri::command]
 async fn get_collection(
@@ -321,6 +336,7 @@ pub fn run() {
             list_films,
             get_film_page,
             set_favorite,
+            set_watchlisted,
             get_collection,
             ensure_film,
             add_to_watchlist,

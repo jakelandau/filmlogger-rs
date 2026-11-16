@@ -54,5 +54,7 @@ export const api = {
     invoke<FilmMetadata>("add_to_watchlist", { tmdbId }),
   setFavorite: (filmId: string, favorite: boolean) =>
     invoke<FilmMetadata>("set_favorite", { filmId, favorite }),
+  setWatchlisted: (filmId: string, watchlisted: boolean) =>
+    invoke<FilmMetadata>("set_watchlisted", { filmId, watchlisted }),
   formatCatalog: () => invoke<FormatCatalog>("format_catalog"),
 };

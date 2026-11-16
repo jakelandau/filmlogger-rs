@@ -130,6 +130,18 @@ fun FilmView(
                         modifier = Modifier.weight(1f),
                     ) { Text("Log viewing", style = MaterialTheme.typography.labelLarge) }
                 }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        mutate { logger.setWatchlisted(film.filmId, !film.watchlisted) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        if (film.watchlisted) "Remove from Bucket List" else "Add to Bucket List",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
                 film.tagline?.let {
                     Spacer(Modifier.height(12.dp))
                     Text(

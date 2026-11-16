@@ -133,6 +133,15 @@ function renderActions(page: FilmPage): HTMLElement {
     el(
       "button",
       {
+        class: film.watchlisted ? "btn" : "btn primary",
+        onclick: () =>
+          void mutate(() => api.setWatchlisted(film.film_id, !film.watchlisted)),
+      },
+      film.watchlisted ? "Remove from Bucket List" : "Add to Bucket List"
+    ),
+    el(
+      "button",
+      {
         class: "btn",
         onclick: () => void mutate(() => api.refreshFilm(film.film_id)),
       },

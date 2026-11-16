@@ -14,8 +14,8 @@ pub mod types;
 use std::sync::{Arc, Mutex};
 
 use crate::types::{
-    FilmId, FilmListEntry, FilmMetadata, FilmPage, Format, FormatCatalog, LoggerError, Movie,
-    NewLogDetails, RatingBoard, SearchPage, Settings, Stats, Venue, WatchLog,
+    Collection, FilmId, FilmListEntry, FilmMetadata, FilmPage, Format, FormatCatalog, LoggerError,
+    Movie, NewLogDetails, RatingBoard, SearchPage, Settings, Stats, Venue, WatchLog,
 };
 use film_logger::FilmLogger;
 
@@ -350,6 +350,25 @@ impl Logger {
             .films()
             .map_err(LoggerError::from)?;
         Ok(films.into_iter().map(Into::into).collect())
+    }
+
+    /// Fetch a TMDB collection and its films.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the logger's internal mutex is poisoned.
+    ///
+    /// # Errors
+    ///
+    /// Returns TMDB or transport errors.
+    pub fn collection(&self, collection_id: i64) -> Result<Collection, LoggerError> {
+        let collection = self
+            .inner
+            .lock()
+            .expect("logger poisoned")
+            .collection(collection_id)
+            .map_err(LoggerError::from)?;
+        Ok(collection.into())
     }
 
     /// One film's page: metadata, history, and statistics.

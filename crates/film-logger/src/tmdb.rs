@@ -15,7 +15,7 @@ use std::time::Duration;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{CastMember, Certifications, CollectionRef, Genre};
+use crate::domain::{CastMember, Certifications, Collection, CollectionPart, CollectionRef, Genre};
 use crate::error::Error;
 
 /// Base URL of the live TMDB API.
@@ -273,6 +273,22 @@ impl TmdbClient {
         Ok(response.into_movie())
     }
 
+    /// Get a TMDB collection and its films.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FilmNotFound`] on a 404, [`Error::Api`] on another
+    /// HTTP error status, [`Error::Serde`] if the response body is not valid
+    /// JSON, or [`Error::Http`] on connection, timeout, or other transport
+    /// errors.
+    pub fn collection(&self, id: i64) -> Result<Collection, Error> {
+        let response: CollectionDetailsResponse = self.get(
+            &format!("/collection/{id}"),
+            &[("language", "en".to_owned())],
+        )?;
+        Ok(response.into_collection())
+    }
+
     /// Find a movie by its IMDB id (e.g. `tt0137523`).
     ///
     /// # Errors
@@ -468,6 +484,62 @@ impl CollectionResponse {
         CollectionRef {
             id: self.id,
             name: self.name,
+            poster_path: self.poster_path,
+        }
+    }
+}
+
+/// TMDB's collection-detail response.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct CollectionDetailsResponse {
+    id: i64,
+    name: String,
+    overview: Option<String>,
+    poster_path: Option<String>,
+    backdrop_path: Option<String>,
+    parts: Vec<CollectionPartResponse>,
+}
+
+impl CollectionDetailsResponse {
+    fn into_collection(self) -> Collection {
+        Collection {
+            id: self.id,
+            name: self.name,
+            overview: self.overview,
+            poster_path: self.poster_path,
+            backdrop_path: self.backdrop_path,
+            parts: self
+                .parts
+                .into_iter()
+                .map(CollectionPartResponse::into_part)
+                .collect(),
+        }
+    }
+}
+
+/// TMDB's collection-part entry.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct CollectionPartResponse {
+    id: i64,
+    title: String,
+    release_date: Option<String>,
+    poster_path: Option<String>,
+}
+
+impl CollectionPartResponse {
+    fn into_part(self) -> CollectionPart {
+        let release_year = self
+            .release_date
+            .as_deref()
+            .and_then(|d| d.get(..4))
+            .and_then(|s| s.parse::<i32>().ok());
+        CollectionPart {
+            tmdb_id: self.id,
+            title: self.title,
+            release_date: self.release_date,
+            release_year,
             poster_path: self.poster_path,
         }
     }

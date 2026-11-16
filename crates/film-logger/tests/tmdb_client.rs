@@ -49,6 +49,28 @@ const MOVIE_JSON: &str = r#"{
     }
 }"#;
 
+const COLLECTION_JSON: &str = r#"{
+    "id": 100,
+    "name": "Fight Club Collection",
+    "overview": "Two films.",
+    "poster_path": "/coll.jpg",
+    "backdrop_path": "/coll-back.jpg",
+    "parts": [
+        {
+            "id": 550,
+            "title": "Fight Club",
+            "release_date": "1999-10-15",
+            "poster_path": "/abc.jpg"
+        },
+        {
+            "id": 551,
+            "title": "Another Fight",
+            "release_date": null,
+            "poster_path": null
+        }
+    ]
+}"#;
+
 const FIND_JSON: &str = r#"{
     "movie_results": [ { "id": 550 } ],
     "person_results": [],
@@ -128,6 +150,19 @@ fn movie_by_id() {
     let collection = movie.collection.as_ref().unwrap();
     assert_eq!(collection.id, 100);
     assert_eq!(collection.name, "Fight Club Collection");
+}
+
+#[test]
+fn collection_details() {
+    let server = start_server(vec![("/collection/100", 200, value(COLLECTION_JSON))]);
+    let client = TmdbClient::with_base_url("test-key", server.uri());
+    let collection = client.collection(100).unwrap();
+    assert_eq!(collection.id, 100);
+    assert_eq!(collection.name, "Fight Club Collection");
+    assert_eq!(collection.parts.len(), 2);
+    assert_eq!(collection.parts[0].tmdb_id, 550);
+    assert_eq!(collection.parts[0].release_year, Some(1999));
+    assert_eq!(collection.parts[1].release_year, None);
 }
 
 #[test]

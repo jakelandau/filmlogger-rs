@@ -103,6 +103,23 @@ export interface CollectionRef {
   poster_path: string | null;
 }
 
+export interface CollectionPart {
+  tmdb_id: number;
+  title: string;
+  release_date: string | null;
+  release_year: number | null;
+  poster_path: string | null;
+}
+
+export interface Collection {
+  id: number;
+  name: string;
+  overview: string | null;
+  poster_path: string | null;
+  backdrop_path: string | null;
+  parts: CollectionPart[];
+}
+
 export interface MovieSummary {
   id: number;
   title: string;

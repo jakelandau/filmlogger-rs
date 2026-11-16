@@ -10,8 +10,8 @@
 use std::sync::{Arc, Mutex};
 
 use film_logger::{
-    FilmId, FilmListEntry, FilmLogger, FilmMetadata, FilmPage, Format, FormatCatalog, Movie,
-    NewLogDetails, RatingBoard, SearchPage, Settings, Stats, TmdbClient, Venue, WatchLog,
+    Collection, FilmId, FilmListEntry, FilmLogger, FilmMetadata, FilmPage, Format, FormatCatalog,
+    Movie, NewLogDetails, RatingBoard, SearchPage, Settings, Stats, TmdbClient, Venue, WatchLog,
 };
 use tauri::Manager;
 
@@ -243,19 +243,13 @@ fn set_favorite(
         .map_err(|e| e.to_string())
 }
 
-/// Replace a film's tags.
+/// Fetch a TMDB collection and its films.
 #[tauri::command]
-fn set_tags(
+async fn get_collection(
     state: tauri::State<'_, AppState>,
-    film_id: String,
-    tags: Vec<String>,
-) -> Result<FilmMetadata, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .set_tags(&parse_film_id(&film_id)?, tags)
-        .map_err(|e| e.to_string())
+    collection_id: i64,
+) -> Result<Collection, String> {
+    run_blocking(&state, move |logger| logger.collection(collection_id)).await
 }
 
 /// The viewing-format catalog.
@@ -307,7 +301,7 @@ pub fn run() {
             list_films,
             get_film_page,
             set_favorite,
-            set_tags,
+            get_collection,
             format_catalog
         ])
         .run(tauri::generate_context!())

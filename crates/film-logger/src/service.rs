@@ -15,8 +15,8 @@ use chrono::Local;
 
 use crate::catalog::{FormatCatalog, format_catalog};
 use crate::domain::{
-    FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, Format, NewLogDetails, RatingBoard,
-    Settings, Venue, WatchLog,
+    Collection, FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, Format, NewLogDetails,
+    RatingBoard, Settings, Venue, WatchLog,
 };
 use crate::error::Error;
 use crate::store::{Stats, Store};
@@ -172,6 +172,15 @@ impl FilmLogger {
     /// Returns store or serialization errors.
     pub fn films(&self) -> Result<Vec<FilmListEntry>, Error> {
         self.store.list_films()
+    }
+
+    /// Fetch a TMDB collection and its films.
+    ///
+    /// # Errors
+    ///
+    /// Returns TMDB or transport errors.
+    pub fn collection(&self, collection_id: i64) -> Result<Collection, Error> {
+        self.client.collection(collection_id)
     }
 
     /// One film's page: metadata, viewing history, and statistics.

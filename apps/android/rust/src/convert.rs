@@ -3,11 +3,11 @@
 use chrono::{DateTime, Utc};
 
 use crate::types::{
-    CastMember, Certification, Certifications, CollectionRef, CountEntry, Dci, Film, FilmId,
-    FilmListEntry, FilmMetadata, FilmPage, FilmStats, FilmViewings, Format, FormatCatalog,
-    FormatGroup, FormatLegality, FormatOption, Genre, HomeMedium, Imax, LoggerError, Movie,
-    MovieSummary, NewLogDetails, Projection, Rating, RatingBoard, ScreenClass, SearchPage,
-    Settings, Stats, Venue, VenueCounts, WatchLog, YearCount,
+    CastMember, Certification, Certifications, Collection, CollectionPart, CollectionRef,
+    CountEntry, Dci, Film, FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, FilmViewings,
+    Format, FormatCatalog, FormatGroup, FormatLegality, FormatOption, Genre, HomeMedium, Imax,
+    LoggerError, Movie, MovieSummary, NewLogDetails, Projection, Rating, RatingBoard, ScreenClass,
+    SearchPage, Settings, Stats, Venue, VenueCounts, WatchLog, YearCount,
 };
 use film_logger as core;
 
@@ -556,6 +556,31 @@ impl From<core::CollectionRef> for CollectionRef {
             id: c.id,
             name: c.name,
             poster_path: c.poster_path,
+        }
+    }
+}
+
+impl From<core::CollectionPart> for CollectionPart {
+    fn from(p: core::CollectionPart) -> Self {
+        Self {
+            tmdb_id: p.tmdb_id,
+            title: p.title,
+            release_date: p.release_date,
+            release_year: p.release_year,
+            poster_path: p.poster_path,
+        }
+    }
+}
+
+impl From<core::Collection> for Collection {
+    fn from(c: core::Collection) -> Self {
+        Self {
+            id: c.id,
+            name: c.name,
+            overview: c.overview,
+            poster_path: c.poster_path,
+            backdrop_path: c.backdrop_path,
+            parts: c.parts.into_iter().map(Into::into).collect(),
         }
     }
 }

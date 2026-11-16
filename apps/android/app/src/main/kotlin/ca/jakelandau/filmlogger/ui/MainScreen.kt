@@ -329,6 +329,7 @@ fun MainScreen() {
 
                             TABS_FILMS ->
                                 FilmsView(
+                                    logger = l,
                                     films = films,
                                     onOpen = { entry -> openFilm(filmKeyOf(entry)) },
                                 )

@@ -402,6 +402,38 @@ pub struct CollectionRef {
     pub poster_path: Option<String>,
 }
 
+/// One film in a TMDB collection.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct CollectionPart {
+    /// The TMDB numeric id.
+    pub tmdb_id: i64,
+    /// The title.
+    pub title: String,
+    /// The release date (`YYYY-MM-DD`), if known.
+    pub release_date: Option<String>,
+    /// The release year, if known.
+    pub release_year: Option<i32>,
+    /// The poster path, if known.
+    pub poster_path: Option<String>,
+}
+
+/// A TMDB collection and its films.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct Collection {
+    /// The TMDB collection id.
+    pub id: i64,
+    /// The collection name.
+    pub name: String,
+    /// A short overview, if known.
+    pub overview: Option<String>,
+    /// The collection poster path, if known.
+    pub poster_path: Option<String>,
+    /// The collection backdrop path, if known.
+    pub backdrop_path: Option<String>,
+    /// The films in the collection.
+    pub parts: Vec<CollectionPart>,
+}
+
 /// A film's stored metadata plus the user's own film-level state.
 #[derive(uniffi::Record, Clone, PartialEq, Debug)]
 pub struct FilmMetadata {

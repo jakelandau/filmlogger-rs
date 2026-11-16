@@ -4,6 +4,7 @@
 // snake_case names (Tauri only converts command argument names).
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  Collection,
   FilmListEntry,
   FilmMetadata,
   FilmPage,
@@ -46,6 +47,8 @@ export const api = {
     invoke<FilmMetadata>("refresh_film", { filmId }),
   listFilms: () => invoke<FilmListEntry[]>("list_films"),
   getFilmPage: (filmId: string) => invoke<FilmPage>("get_film_page", { filmId }),
+  getCollection: (collectionId: number) =>
+    invoke<Collection>("get_collection", { collectionId }),
   setFavorite: (filmId: string, favorite: boolean) =>
     invoke<FilmMetadata>("set_favorite", { filmId, favorite }),
   formatCatalog: () => invoke<FormatCatalog>("format_catalog"),

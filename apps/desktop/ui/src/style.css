@@ -747,3 +747,79 @@ select {
   color: var(--fg);
   font-weight: 600;
 }
+
+/* Collection groups */
+.collection-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.collection-head {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.collection-head .poster {
+  width: 56px;
+  height: 84px;
+}
+
+.collection-main {
+  min-width: 0;
+}
+
+.collection-title {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.collection-parts {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+}
+
+.collection-part {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border);
+}
+
+.collection-part.clickable {
+  cursor: pointer;
+}
+
+.collection-part.clickable:hover {
+  color: var(--accent);
+}
+
+.collection-mark {
+  width: 14px;
+  color: var(--muted);
+}
+
+.collection-mark.seen {
+  color: var(--accent);
+}
+
+.collection-part-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.collection-status {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.collection-status.seen {
+  color: var(--accent);
+  font-weight: 600;
+}

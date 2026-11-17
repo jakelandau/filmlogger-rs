@@ -53,4 +53,11 @@ a repository secret on CI); `.env` is gitignored.
 
 ## License
 
-Licensed under the [GNU Lesser General Public License v3 (or later)](LICENSE).
+Licensed under the [GNU Affero General Public License v3 (or later)](LICENSE).
+
+FilmLogger is a local desktop and Android app, but the AGPL closes the
+application-service loophole: anyone who hosts a modified version of this code
+as a network service must offer its complete corresponding source to that
+service's users. Third-party dependency licenses remain compatible with
+AGPL-3.0-or-later; see [`THIRD_PARTY.md`](THIRD_PARTY.md) for the inventory and
+the compatibility notes.

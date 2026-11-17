@@ -5,7 +5,7 @@ members = ["crates/film-logger", "apps/desktop/src-tauri", "apps/android/rust"]
 [workspace.package]
 edition = "2024"
 rust-version = "1.85"
-license = "LGPL-3.0-or-later"
+license = "AGPL-3.0-or-later"
 repository = "https://github.com/jakelandau/filmlogger-rs"
 
 [workspace.dependencies]

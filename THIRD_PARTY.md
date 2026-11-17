@@ -1,6 +1,6 @@
 # Third-party libraries and assets
 
-FilmLogger itself is licensed under **LGPL-3.0-or-later**. This file records the
+FilmLogger itself is licensed under **AGPL-3.0-or-later**. This file records the
 third-party direct dependencies used by the Rust core, the Tauri desktop app,
 and the Android app. Resolved transitive dependencies are pinned in
 [`Cargo.lock`](Cargo.lock) and [`apps/desktop/ui/package-lock.json`](apps/desktop/ui/package-lock.json);
@@ -71,3 +71,16 @@ Apache-2.0 licenses.
 | TMDB logo | <https://www.themoviedb.org/about/logos-attribution> | The Movie Database (TMDB) logo attribution; TMDB API is not endorsed or certified by TMDB. |
 | Official rating symbols and country flags | Wikimedia Commons; original files are in `apps/android/app/src/main/assets/cert-icons/official/` | Each file retains the license stated on its Wikimedia Commons file description page. |
 | Film metadata, posters, and backdrops | The Movie Database (TMDB) API | Supplied under the TMDB API terms; not included in this repository. |
+
+## AGPL-3.0-or-later compatibility
+
+| License | Used by | Compatible with AGPL-3.0-or-later? |
+|---|---|---|
+| MIT / MIT OR Apache-2.0 | nearly every Rust crate and npm package | Yes — permissive, no additional restrictions. |
+| Apache-2.0 | TypeScript, Kotlin, AndroidX, Compose, Coil, JNA (chosen arm) | Yes — Apache-2.0 is GPLv3-compatible, and AGPLv3 accepts GPLv3-compatible terms. |
+| MPL-2.0 | uniffi (Rust and Kotlin bindings) | Yes — MPL-2.0 §3.3 explicitly allows a larger work under a secondary license, and AGPL-3.0 is one. The MPL-covered files keep their own license. |
+| Public domain | SQLite (bundled via rusqlite) | Yes — no conditions. |
+| EPL-1.0 | JUnit 4, test-only | Not compatible in a combined distribution (EPL-1.0 has no secondary-license clause), but it is a `testImplementation` dependency: it never enters the APK or any shipped artifact, so it does not affect the licensed work. Do not ship JUnit 4 with the binaries. |
+| Wikimedia Commons per-file licenses | rating symbols and country flags | Assets are not relicensed by the AGPL; each file stays under its Commons license and requires the attribution recorded on its file description page. |
+
+No dependency in the shipped product is GPL-only or AGPL-3.0-incompatible.

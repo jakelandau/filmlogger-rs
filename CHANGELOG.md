@@ -50,6 +50,10 @@ example `## [0.1.0] - 2026-11-15`.
 
 ### Changed
 
+- The project is now licensed under **AGPL-3.0-or-later** instead of
+  LGPL-3.0-or-later, so hosting a modified copy as a network service requires
+  offering its source to that service's users. Every shipped dependency is
+  AGPL-compatible; see the compatibility table in `THIRD_PARTY.md`.
 - `rewatch` and `watch_count` are now store-derived projections recomputed from
   each film's chronological viewing history.
 - Database import validates the source before replacing live data.

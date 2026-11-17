@@ -38,64 +38,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import ca.jakelandau.filmlogger.R
 import coil.compose.AsyncImage
-import java.time.Instant
-import java.time.ZoneOffset
 import uniffi.filmlogger_rs_ffi.Rating
 import uniffi.filmlogger_rs_ffi.Venue
 import uniffi.filmlogger_rs_ffi.WatchLog
-
-private enum class LogSort { RECENT, OLDEST, TITLE, RATING }
 
 // Density-independent spacing keeps the card rhythm stable across devices.
 private val CardPadding = 16.dp
 private val PosterGap = 16.dp
 private val RowGap = 6.dp
 private val InlineGap = 6.dp
-
-private fun utcMillis(log: WatchLog): Long = Instant.parse(log.watchedAt).toEpochMilli()
-
-private fun utcYear(log: WatchLog): Int =
-    Instant.parse(log.watchedAt).atZone(ZoneOffset.UTC).year
-
-private fun ratingRank(rating: Rating?): Int = when (rating) {
-    Rating.UP -> 0
-    Rating.DOWN -> 1
-    null -> 2
-}
-
-/**
- * Filter and sort logs for display, matching the desktop list semantics:
- * text matches the title or notes case-insensitively, the year is the UTC
- * year, and sort ties fall back to recency.
- */
-private fun filterLogs(
-    logs: List<WatchLog>,
-    text: String,
-    venue: Venue?,
-    year: Int?,
-    rating: Rating?,
-    sort: LogSort,
-): List<WatchLog> {
-    val needle = text.trim().lowercase()
-    val matched = logs.filter { log ->
-        (venue == null || log.venue == venue) &&
-            (year == null || utcYear(log) == year) &&
-            (rating == null || log.rating == rating) &&
-            (needle.isEmpty() || log.title.lowercase().contains(needle))
-    }
-    val recent: Comparator<WatchLog> =
-        compareByDescending<WatchLog> { utcMillis(it) }.thenByDescending { it.id }
-    return when (sort) {
-        LogSort.RECENT -> matched.sortedWith(recent)
-        LogSort.OLDEST -> matched.sortedWith(recent.reversed())
-        LogSort.TITLE -> matched.sortedWith(
-            compareBy<WatchLog> { it.title.lowercase() }.then(recent),
-        )
-        LogSort.RATING -> matched.sortedWith(
-            compareBy<WatchLog> { ratingRank(it.rating) }.then(recent),
-        )
-    }
-}
 
 /** The log list: every recorded viewing, filterable and sortable. */
 @OptIn(ExperimentalLayoutApi::class)

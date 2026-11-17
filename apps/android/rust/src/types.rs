@@ -170,6 +170,35 @@ pub enum HomeMedium {
     Custom { id: String },
 }
 
+/// The format-selection state, flattened to catalog string keys.
+///
+/// The venue is passed separately; the venue decides which fields matter:
+/// home viewings use `medium*`, theatre viewings use
+/// `family`/`technology`/`screen` and the presentation flags.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct FormatParts {
+    /// The projection family key: `dci`, `imax`, or `film`.
+    pub family: String,
+    /// The technology key within the family, or `custom`.
+    pub technology: String,
+    /// The custom technology id when `technology` is `custom`.
+    pub technology_custom: String,
+    /// The auditorium class key, or `custom`.
+    pub screen: String,
+    /// The custom auditorium id when `screen` is `custom`.
+    pub screen_custom: String,
+    /// The home release medium key, or `custom`.
+    pub medium: String,
+    /// The custom medium id when `medium` is `custom`.
+    pub medium_custom: String,
+    /// Presented in 3D.
+    pub three_d: bool,
+    /// Presented at high frame rate.
+    pub hfr: bool,
+    /// Presented on D-BOX motion seats (theatre only).
+    pub dbox: bool,
+}
+
 /// One region's certification.
 #[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
 pub struct Certification {
@@ -514,11 +543,34 @@ pub struct FilmMetadata {
     pub metadata_refreshed_at: Option<String>,
 }
 
+/// The Films-tab and collection-card projection of a stored film.
+///
+/// The full [`FilmMetadata`] is only returned for a single film's page.
+#[derive(uniffi::Record, Clone, PartialEq, Debug)]
+pub struct LibraryFilm {
+    /// Canonical film identifier.
+    pub film_id: FilmId,
+    /// The TMDB numeric id, if known.
+    pub tmdb_id: Option<i64>,
+    /// The title.
+    pub title: String,
+    /// The release year, if known.
+    pub release_year: Option<i32>,
+    /// The poster path, if known.
+    pub poster_path: Option<String>,
+    /// The collection the film belongs to, if any.
+    pub collection: Option<CollectionRef>,
+    /// Whether the user marked the film a favorite.
+    pub favorite: bool,
+    /// Whether the user put the film on their watchlist.
+    pub watchlisted: bool,
+}
+
 /// One film in the library list, with its viewing summary.
 #[derive(uniffi::Record, Clone, PartialEq, Debug)]
 pub struct FilmListEntry {
-    /// The film metadata.
-    pub film: FilmMetadata,
+    /// The film, as the library list renders it.
+    pub film: LibraryFilm,
     /// Number of stored viewings.
     pub viewings: u32,
     /// The most recent viewing instant (RFC 3339), if any.

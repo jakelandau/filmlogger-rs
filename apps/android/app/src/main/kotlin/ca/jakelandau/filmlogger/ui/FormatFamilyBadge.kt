@@ -10,10 +10,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import uniffi.filmlogger_rs_ffi.Format
+import uniffi.filmlogger_rs_ffi.Projection
+
+/** Display label for the projection family; `null` when no format is stored. */
+fun formatFamily(format: Format?): String? = when (format) {
+    null -> null
+    is Format.Home -> "HOME"
+    is Format.Theatre -> when (format.projection) {
+        is Projection.Dci -> "DCI"
+        is Projection.Imax -> "IMAX"
+        is Projection.Film -> "FILM"
+    }
+}
 
 /** A prominent IMAX / DCI / FILM badge shown before the format summary. */
 @Composable
-fun FormatFamilyBadge(format: uniffi.filmlogger_rs_ffi.Format?) {
+fun FormatFamilyBadge(format: Format?) {
     val family = formatFamily(format) ?: return
     val background = when (family) {
         "IMAX" -> Color(0xFF243642)

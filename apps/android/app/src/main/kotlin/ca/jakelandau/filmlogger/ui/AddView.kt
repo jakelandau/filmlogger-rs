@@ -53,6 +53,8 @@ import uniffi.filmlogger_rs_ffi.NewLogDetails
 import uniffi.filmlogger_rs_ffi.Rating
 import uniffi.filmlogger_rs_ffi.SearchPage
 import uniffi.filmlogger_rs_ffi.Venue
+import uniffi.filmlogger_rs_ffi.formatFromParts
+import uniffi.filmlogger_rs_ffi.formatParts
 
 /** The selected search/finder result the user is about to log. */
 data class SelectedFilm(
@@ -213,7 +215,7 @@ fun AddView(
             onError("Invalid watched-at date or time zone")
             return
         }
-        val f = format ?: FormatText.build(FormatParts.forVenue(venue))
+        val f = format ?: formatFromParts(formatParts(null, venue), venue)
         val details = NewLogDetails(
             watchedAt = parsed,
             timezone = timezone,

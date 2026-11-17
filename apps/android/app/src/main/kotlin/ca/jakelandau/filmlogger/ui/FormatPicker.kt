@@ -24,7 +24,10 @@ import uniffi.filmlogger_rs_ffi.Format
 import uniffi.filmlogger_rs_ffi.FormatCatalog
 import uniffi.filmlogger_rs_ffi.FormatGroup
 import uniffi.filmlogger_rs_ffi.FormatLegality
+import uniffi.filmlogger_rs_ffi.FormatParts
 import uniffi.filmlogger_rs_ffi.Venue
+import uniffi.filmlogger_rs_ffi.formatFromParts
+import uniffi.filmlogger_rs_ffi.formatParts
 
 private fun options(group: FormatGroup?): List<Pair<String, String>> =
     group?.options?.map { it.key to it.label } ?: emptyList()
@@ -46,14 +49,18 @@ private fun withLegacy(
 
 private fun legalityOf(catalog: FormatCatalog, parts: FormatParts): FormatLegality? =
     catalog.legal.firstOrNull {
-        it.family == parts.family && it.technology == parts.tech && it.screen == parts.screen
+        it.family == parts.family && it.technology == parts.technology && it.screen == parts.screen
     }
 
 /** Clamp the presentation flags to those the selected combination allows. */
-private fun normalizeFlags(parts: FormatParts, catalog: FormatCatalog): FormatParts {
+private fun normalizeFlags(
+    parts: FormatParts,
+    catalog: FormatCatalog,
+    venue: Venue,
+): FormatParts {
     val allowedFlags: List<String>
     val forcedFlags: List<String>
-    if (parts.venue == Venue.HOME) {
+    if (venue == Venue.HOME) {
         val entry = catalog.homeLegal.firstOrNull { it.medium == parts.medium }
         allowedFlags = entry?.allowedFlags ?: emptyList()
         forcedFlags = entry?.forcedFlags ?: emptyList()
@@ -97,17 +104,17 @@ fun FormatPicker(
     onFormat: (Format) -> Unit,
 ) {
     var parts by remember(initial, venue) {
-        mutableStateOf(normalizeFlags(FormatText.decompose(initial, venue), catalog))
+        mutableStateOf(normalizeFlags(formatParts(initial, venue), catalog, venue))
     }
     val scope = rememberCoroutineScope()
     var lastReported by remember(initial, venue) {
-        mutableStateOf(FormatText.build(FormatText.decompose(initial, venue)))
+        mutableStateOf(formatFromParts(formatParts(initial, venue), venue))
     }
 
     fun update(next: FormatParts) {
-        val normalized = normalizeFlags(next, catalog)
+        val normalized = normalizeFlags(next, catalog, venue)
         parts = normalized
-        val built = FormatText.build(normalized)
+        val built = formatFromParts(normalized, venue)
         if (built != lastReported) {
             lastReported = built
             scope.launch { onFormat(built) }
@@ -169,8 +176,8 @@ fun FormatPicker(
                 update(
                     parts.copy(
                         family = key,
-                        tech = nextTech,
-                        techCustom = "",
+                        technology = nextTech,
+                        technologyCustom = "",
                         screen = nextScreen,
                         screenCustom = "",
                         threeD = false,
@@ -181,15 +188,15 @@ fun FormatPicker(
             }
             OptionField(
                 "Technology",
-                parts.tech,
+                parts.technology,
                 withLegacy(
                     catalog.technologies.firstOrNull { it.key == parts.family }?.options?.map { it.key to it.label }
                         ?: emptyList(),
-                    parts.tech,
-                    parts.techCustom,
+                    parts.technology,
+                    parts.technologyCustom,
                 ),
             ) { key ->
-                update(parts.copy(tech = key, techCustom = if (key == "custom") parts.techCustom else ""))
+                update(parts.copy(technology = key, technologyCustom = if (key == "custom") parts.technologyCustom else ""))
             }
             OptionField(
                 "Auditorium",

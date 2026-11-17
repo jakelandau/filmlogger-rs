@@ -35,6 +35,8 @@ import uniffi.filmlogger_rs_ffi.LoggerException
 import uniffi.filmlogger_rs_ffi.Rating
 import uniffi.filmlogger_rs_ffi.Venue
 import uniffi.filmlogger_rs_ffi.WatchLog
+import uniffi.filmlogger_rs_ffi.formatFromParts
+import uniffi.filmlogger_rs_ffi.formatParts
 
 /**
  * Edit an existing watch log in place. The store derives `rewatch` and
@@ -52,7 +54,7 @@ fun EditView(
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf(log.title) }
     var venue by remember { mutableStateOf(log.venue) }
-    var format by remember { mutableStateOf(log.format ?: FormatText.build(FormatParts.forVenue(log.venue))) }
+    var format by remember { mutableStateOf(log.format ?: formatFromParts(formatParts(null, log.venue), log.venue)) }
     var timezone by remember { mutableStateOf(log.timezone ?: TimeUtils.systemZone().id) }
     var watchedAtInput by remember {
         mutableStateOf(TimeUtils.toLocalInput(log.watchedAt, TimeUtils.zone(timezone)))

@@ -40,7 +40,6 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import uniffi.filmlogger_rs_ffi.FilmId
 import uniffi.filmlogger_rs_ffi.FilmListEntry
 import uniffi.filmlogger_rs_ffi.FilmMetadata
 import uniffi.filmlogger_rs_ffi.FilmPage
@@ -49,16 +48,14 @@ import uniffi.filmlogger_rs_ffi.Logger
 import uniffi.filmlogger_rs_ffi.RatingBoard
 import uniffi.filmlogger_rs_ffi.Stats
 import uniffi.filmlogger_rs_ffi.WatchLog
+import uniffi.filmlogger_rs_ffi.filmIdFromKey
+import uniffi.filmlogger_rs_ffi.filmKeyOf
 
 private const val TABS_LOGS = 0
 private const val TABS_FILMS = 1
 private const val TABS_ADD = 2
 private const val TABS_STATS = 3
 private const val TABS_SETTINGS = 4
-
-/** Parse a storage key (`tt…` / `tmdb:…`) back into a [`FilmId`]. */
-fun filmIdFromKey(key: String): FilmId =
-    if (key.startsWith("tmdb:")) FilmId.Tmdb(key.removePrefix("tmdb:").toLong()) else FilmId.Imdb(key)
 
 /** The whole app: logger lifetime, bottom navigation, and the active view. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -337,7 +334,7 @@ fun MainScreen() {
                                     logger = l,
                                     films = films,
                                     dataEpoch = dataEpoch,
-                                    onOpen = { entry -> openFilm(filmKeyOf(entry)) },
+                                    onOpen = { entry -> openFilm(filmKeyOf(entry.film.filmId)) },
                                     onAdd = {
                                         preselected = null
                                         editingId = null
@@ -352,7 +349,7 @@ fun MainScreen() {
                                                     l.ensureFilm(tmdbId)
                                                 }
                                                 refresh()
-                                                openFilm(filmKeyOf(film))
+                                                openFilm(filmKeyOf(film.filmId))
                                             } catch (t: Throwable) {
                                                 status = t.message ?: t.toString()
                                             }
@@ -395,11 +392,3 @@ fun MainScreen() {
     }
 }
 
-/** A library entry's storage key. */
-fun filmKeyOf(entry: FilmListEntry): String = filmKeyOf(entry.film)
-
-/** A film's storage key. */
-fun filmKeyOf(film: FilmMetadata): String = when (val id = film.filmId) {
-    is FilmId.Imdb -> id.id
-    is FilmId.Tmdb -> "tmdb:${id.id}"
-}

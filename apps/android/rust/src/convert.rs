@@ -5,10 +5,10 @@ use chrono::{DateTime, Utc};
 use crate::types::{
     CastMember, Certification, Certifications, Collection, CollectionPart, CollectionRef,
     CountEntry, Dci, Film, FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, FilmViewings,
-    Format, FormatCatalog, FormatGroup, FormatLegality, FormatOption, Genre, HomeFormatLegality,
-    HomeMedium, Imax, LoggerError, Movie, MovieSummary, NewLogDetails, Projection, Rating,
-    RatingBoard, RatingCounts, ScreenClass, SearchPage, Settings, Stats, Venue, VenueCounts,
-    WatchLog, YearCount,
+    Format, FormatCatalog, FormatGroup, FormatLegality, FormatOption, FormatParts, Genre,
+    HomeFormatLegality, HomeMedium, Imax, LibraryFilm, LoggerError, Movie, MovieSummary,
+    NewLogDetails, Projection, Rating, RatingBoard, RatingCounts, ScreenClass, SearchPage,
+    Settings, Stats, Venue, VenueCounts, WatchLog, YearCount,
 };
 use filmlogger_rs as core;
 
@@ -315,6 +315,269 @@ impl From<core::Format> for Format {
             _ => unreachable!(),
         }
     }
+}
+
+// --- Format parts ---------------------------------------------------------
+//
+// The Kotlin picker is catalog-driven and works with string keys. Both
+// directions live here so a core key rename cannot leave Android behind.
+
+/// The venue defaults for a fresh selection: DCI 2K xenon, a regular
+/// auditorium, and Blu-ray.
+fn default_parts() -> FormatParts {
+    FormatParts {
+        family: "dci".to_owned(),
+        technology: "2k_lamp".to_owned(),
+        technology_custom: String::new(),
+        screen: "regular".to_owned(),
+        screen_custom: String::new(),
+        medium: "bluray".to_owned(),
+        medium_custom: String::new(),
+        three_d: false,
+        hfr: false,
+        dbox: false,
+    }
+}
+
+/// `(family, technology, custom technology id)` for a projection.
+fn projection_parts(projection: &Projection) -> (String, String, String) {
+    match projection {
+        Projection::Dci { dci } => {
+            let (technology, custom) = dci_parts(dci);
+            ("dci".to_owned(), technology, custom)
+        }
+        Projection::Imax { imax } => {
+            let (technology, custom) = imax_parts(imax);
+            ("imax".to_owned(), technology, custom)
+        }
+        Projection::Film { film } => {
+            let (technology, custom) = film_parts(film);
+            ("film".to_owned(), technology, custom)
+        }
+    }
+}
+
+fn dci_parts(dci: &Dci) -> (String, String) {
+    match dci {
+        Dci::Lamp2K => ("2k_lamp".to_owned(), String::new()),
+        Dci::Laser2K => ("2k_laser".to_owned(), String::new()),
+        Dci::Lamp4K => ("4k_lamp".to_owned(), String::new()),
+        Dci::Laser4K => ("4k_laser".to_owned(), String::new()),
+        Dci::Custom { id } => ("custom".to_owned(), id.clone()),
+    }
+}
+
+fn imax_parts(imax: &Imax) -> (String, String) {
+    match imax {
+        Imax::Xenon2K => ("2k_xenon".to_owned(), String::new()),
+        Imax::Laser4KSingle => ("4k_single_laser".to_owned(), String::new()),
+        Imax::Laser4KDual => ("4k_dual_laser".to_owned(), String::new()),
+        Imax::Film70mm => ("70mm".to_owned(), String::new()),
+        Imax::Custom { id } => ("custom".to_owned(), id.clone()),
+    }
+}
+
+fn film_parts(film: &Film) -> (String, String) {
+    match film {
+        Film::Mm35 => ("35mm".to_owned(), String::new()),
+        Film::Mm70 => ("70mm".to_owned(), String::new()),
+        Film::Custom { id } => ("custom".to_owned(), id.clone()),
+    }
+}
+
+fn screen_parts(screen: &ScreenClass) -> (String, String) {
+    match screen {
+        ScreenClass::Regular => ("regular".to_owned(), String::new()),
+        ScreenClass::Plf => ("plf".to_owned(), String::new()),
+        ScreenClass::Vip => ("vip".to_owned(), String::new()),
+        ScreenClass::FourDx => ("4dx".to_owned(), String::new()),
+        ScreenClass::ScreenX => ("screenx".to_owned(), String::new()),
+        ScreenClass::ImaxClassic => ("imax_class".to_owned(), String::new()),
+        ScreenClass::ImaxRetrofit => ("imax_retrofit".to_owned(), String::new()),
+        ScreenClass::Ultra4Dx => ("ultra_4dx".to_owned(), String::new()),
+        ScreenClass::Custom { id } => ("custom".to_owned(), id.clone()),
+    }
+}
+
+fn medium_parts(medium: &HomeMedium) -> (String, String) {
+    match medium {
+        HomeMedium::Dvd => ("dvd".to_owned(), String::new()),
+        HomeMedium::HdDvd => ("hd_dvd".to_owned(), String::new()),
+        HomeMedium::BluRay => ("bluray".to_owned(), String::new()),
+        HomeMedium::BluRay3D => ("bluray_3d".to_owned(), String::new()),
+        HomeMedium::UhdBluRay => ("uhd_bluray".to_owned(), String::new()),
+        HomeMedium::LaserDisc => ("laserdisc".to_owned(), String::new()),
+        HomeMedium::Streaming => ("streaming".to_owned(), String::new()),
+        HomeMedium::Broadcast => ("broadcast".to_owned(), String::new()),
+        HomeMedium::Telecine => ("telecine".to_owned(), String::new()),
+        HomeMedium::Custom { id } => ("custom".to_owned(), id.clone()),
+    }
+}
+
+fn dci_from_key(key: &str, custom: &str) -> Dci {
+    match key {
+        k if k == core::Dci::Lamp2K.key() => Dci::Lamp2K,
+        k if k == core::Dci::Laser2K.key() => Dci::Laser2K,
+        k if k == core::Dci::Lamp4K.key() => Dci::Lamp4K,
+        k if k == core::Dci::Laser4K.key() => Dci::Laser4K,
+        _ => Dci::Custom {
+            id: custom.to_owned(),
+        },
+    }
+}
+
+fn imax_from_key(key: &str, custom: &str) -> Imax {
+    match key {
+        k if k == core::Imax::Xenon2K.key() => Imax::Xenon2K,
+        k if k == core::Imax::Laser4KSingle.key() => Imax::Laser4KSingle,
+        k if k == core::Imax::Laser4KDual.key() => Imax::Laser4KDual,
+        k if k == core::Imax::Film70mm.key() => Imax::Film70mm,
+        _ => Imax::Custom {
+            id: custom.to_owned(),
+        },
+    }
+}
+
+fn film_from_key(key: &str, custom: &str) -> Film {
+    match key {
+        k if k == core::Film::Mm35.key() => Film::Mm35,
+        k if k == core::Film::Mm70.key() => Film::Mm70,
+        _ => Film::Custom {
+            id: custom.to_owned(),
+        },
+    }
+}
+
+fn screen_from_key(key: &str, custom: &str) -> ScreenClass {
+    match key {
+        k if k == core::ScreenClass::Regular.key() => ScreenClass::Regular,
+        k if k == core::ScreenClass::Plf.key() => ScreenClass::Plf,
+        k if k == core::ScreenClass::Vip.key() => ScreenClass::Vip,
+        k if k == core::ScreenClass::FourDx.key() => ScreenClass::FourDx,
+        k if k == core::ScreenClass::ScreenX.key() => ScreenClass::ScreenX,
+        k if k == core::ScreenClass::ImaxClassic.key() => ScreenClass::ImaxClassic,
+        k if k == core::ScreenClass::ImaxRetrofit.key() => ScreenClass::ImaxRetrofit,
+        k if k == core::ScreenClass::Ultra4Dx.key() => ScreenClass::Ultra4Dx,
+        _ => ScreenClass::Custom {
+            id: custom.to_owned(),
+        },
+    }
+}
+
+fn medium_from_key(key: &str, custom: &str) -> HomeMedium {
+    match key {
+        k if k == core::HomeMedium::Dvd.key() => HomeMedium::Dvd,
+        k if k == core::HomeMedium::HdDvd.key() => HomeMedium::HdDvd,
+        k if k == core::HomeMedium::BluRay.key() => HomeMedium::BluRay,
+        k if k == core::HomeMedium::BluRay3D.key() => HomeMedium::BluRay3D,
+        k if k == core::HomeMedium::UhdBluRay.key() => HomeMedium::UhdBluRay,
+        k if k == core::HomeMedium::LaserDisc.key() => HomeMedium::LaserDisc,
+        k if k == core::HomeMedium::Streaming.key() => HomeMedium::Streaming,
+        k if k == core::HomeMedium::Broadcast.key() => HomeMedium::Broadcast,
+        k if k == core::HomeMedium::Telecine.key() => HomeMedium::Telecine,
+        _ => HomeMedium::Custom {
+            id: custom.to_owned(),
+        },
+    }
+}
+
+/// Flatten a stored format (or the venue's defaults) into catalog keys.
+///
+/// A format whose venue does not match `venue` yields the defaults.
+#[must_use]
+pub fn format_parts(format: Option<Format>, venue: Venue) -> FormatParts {
+    let mut parts = default_parts();
+    match (venue, format) {
+        (
+            Venue::Theatre,
+            Some(Format::Theatre {
+                projection,
+                screen,
+                three_d,
+                hfr,
+                dbox,
+            }),
+        ) => {
+            let (family, technology, technology_custom) = projection_parts(&projection);
+            let (screen_key, screen_custom) = screen_parts(&screen);
+            parts.family = family;
+            parts.technology = technology;
+            parts.technology_custom = technology_custom;
+            parts.screen = screen_key;
+            parts.screen_custom = screen_custom;
+            parts.three_d = three_d;
+            parts.hfr = hfr;
+            parts.dbox = dbox;
+        }
+        (
+            Venue::Home,
+            Some(Format::Home {
+                medium,
+                three_d,
+                hfr,
+            }),
+        ) => {
+            let (medium_key, medium_custom) = medium_parts(&medium);
+            parts.medium = medium_key;
+            parts.medium_custom = medium_custom;
+            parts.three_d = three_d;
+            parts.hfr = hfr;
+        }
+        _ => {}
+    }
+    parts
+}
+
+/// Build the format for `venue` from flattened catalog keys.
+///
+/// Fields the venue does not use are ignored: `medium*` for a theatre
+/// viewing, and the projection/screen fields for a home viewing.
+#[must_use]
+pub fn format_from_parts(parts: &FormatParts, venue: Venue) -> Format {
+    if venue == Venue::Home {
+        Format::Home {
+            medium: medium_from_key(&parts.medium, &parts.medium_custom),
+            three_d: parts.three_d,
+            hfr: parts.hfr,
+        }
+    } else {
+        let projection = match parts.family.as_str() {
+            "imax" => Projection::Imax {
+                imax: imax_from_key(&parts.technology, &parts.technology_custom),
+            },
+            "film" => Projection::Film {
+                film: film_from_key(&parts.technology, &parts.technology_custom),
+            },
+            _ => Projection::Dci {
+                dci: dci_from_key(&parts.technology, &parts.technology_custom),
+            },
+        };
+        Format::Theatre {
+            projection,
+            screen: screen_from_key(&parts.screen, &parts.screen_custom),
+            three_d: parts.three_d,
+            hfr: parts.hfr,
+            dbox: parts.dbox,
+        }
+    }
+}
+
+/// Parse a canonical film key (`tt0137523` / `tmdb:550`).
+///
+/// # Errors
+///
+/// Returns [`LoggerError::InvalidFilmId`] if `key` is not a valid film key.
+pub fn film_id_from_key(key: &str) -> Result<FilmId, LoggerError> {
+    core::FilmId::from_key(key)
+        .map(Into::into)
+        .map_err(LoggerError::from)
+}
+
+/// The canonical storage/display key for a film id.
+#[must_use]
+pub fn film_key_of(film_id: &FilmId) -> String {
+    let film_id: core::FilmId = film_id.clone().into();
+    film_id.key()
 }
 
 // --- Certifications -------------------------------------------------------
@@ -650,6 +913,21 @@ impl From<core::FilmMetadata> for FilmMetadata {
     }
 }
 
+impl From<core::LibraryFilm> for LibraryFilm {
+    fn from(f: core::LibraryFilm) -> Self {
+        Self {
+            film_id: f.film_id.into(),
+            tmdb_id: f.tmdb_id,
+            title: f.title,
+            release_year: f.release_year,
+            poster_path: f.poster_path,
+            collection: f.collection.map(Into::into),
+            favorite: f.favorite,
+            watchlisted: f.watchlisted,
+        }
+    }
+}
+
 impl From<core::FilmListEntry> for FilmListEntry {
     fn from(e: core::FilmListEntry) -> Self {
         Self {
@@ -834,5 +1112,106 @@ impl From<core::Error> for LoggerError {
             core::Error::InvalidFilmId { value } => LoggerError::InvalidFilmId { value },
             core::Error::InvalidStoredLog { id } => LoggerError::InvalidStoredLog { id },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{default_parts, film_id_from_key, film_key_of, format_from_parts, format_parts};
+    use crate::types::{
+        Dci, Film, Format, FormatParts, HomeMedium, Imax, Projection, ScreenClass, Venue,
+    };
+    use filmlogger_rs as core;
+
+    #[test]
+    fn format_parts_roundtrip() {
+        let catalog = core::format_catalog();
+        for family in &catalog.families {
+            for technology in &catalog.technologies[&family.key] {
+                for screen in &catalog.screens[&family.key] {
+                    let parts = FormatParts {
+                        family: family.key.clone(),
+                        technology: technology.key.clone(),
+                        technology_custom: String::new(),
+                        screen: screen.key.clone(),
+                        screen_custom: String::new(),
+                        ..default_parts()
+                    };
+                    let format = format_from_parts(&parts, Venue::Theatre);
+                    assert_eq!(format_parts(Some(format), Venue::Theatre), parts);
+                }
+            }
+        }
+        for medium in &catalog.mediums {
+            let parts = FormatParts {
+                medium: medium.key.clone(),
+                medium_custom: String::new(),
+                ..default_parts()
+            };
+            let format = format_from_parts(&parts, Venue::Home);
+            assert_eq!(format_parts(Some(format), Venue::Home), parts);
+        }
+    }
+
+    #[test]
+    fn format_custom_roundtrip() {
+        let cases = [
+            Format::Theatre {
+                projection: Projection::Dci {
+                    dci: Dci::Custom { id: "dci_x".into() },
+                },
+                screen: ScreenClass::Custom {
+                    id: "screen_x".into(),
+                },
+                three_d: true,
+                hfr: false,
+                dbox: false,
+            },
+            Format::Theatre {
+                projection: Projection::Imax {
+                    imax: Imax::Custom {
+                        id: "imax_x".into(),
+                    },
+                },
+                screen: ScreenClass::ImaxClassic,
+                three_d: false,
+                hfr: true,
+                dbox: false,
+            },
+            Format::Theatre {
+                projection: Projection::Film {
+                    film: Film::Custom {
+                        id: "film_x".into(),
+                    },
+                },
+                screen: ScreenClass::Regular,
+                three_d: false,
+                hfr: false,
+                dbox: true,
+            },
+        ];
+        for format in cases {
+            let parts = format_parts(Some(format.clone()), Venue::Theatre);
+            assert_eq!(format_from_parts(&parts, Venue::Theatre), format);
+        }
+
+        let home = Format::Home {
+            medium: HomeMedium::Custom {
+                id: "medium_x".into(),
+            },
+            three_d: false,
+            hfr: true,
+        };
+        let parts = format_parts(Some(home.clone()), Venue::Home);
+        assert_eq!(format_from_parts(&parts, Venue::Home), home);
+    }
+
+    #[test]
+    fn film_key_roundtrip() {
+        for key in ["tt0137523", "tmdb:550"] {
+            let film_id = film_id_from_key(key).unwrap();
+            assert_eq!(film_key_of(&film_id), key);
+        }
+        assert!(film_id_from_key("tmdb:abc").is_err());
     }
 }

@@ -53,8 +53,6 @@ import uniffi.filmlogger_rs_ffi.LoggerException
 import uniffi.filmlogger_rs_ffi.MovieSummary
 import uniffi.filmlogger_rs_ffi.SearchPage
 
-private enum class FilmTab { SEEN, BUCKET_LIST, COLLECTIONS }
-
 private val filmTabs = listOf(
     FilmTab.SEEN to "Seen",
     FilmTab.BUCKET_LIST to "Bucket List",
@@ -104,9 +102,7 @@ fun FilmsView(
         }
     }
 
-    val libraryByTmdb = remember(films) {
-        films.mapNotNull { entry -> entry.film.tmdbId?.let { it to entry } }.toMap()
-    }
+    val libraryByTmdb = remember(films) { filmLibraryByTmdb(films) }
 
     fun searchTmdb(page: Int = 1) {
         val query = search.trim()
@@ -160,7 +156,7 @@ fun FilmsView(
     fun addMissingToBucketList(collection: Collection) {
         if (addingTmdb != null || addingCollection != null) return
         addingCollection = collection.id
-        val missing = missingParts(collection, libraryByTmdb)
+        val missing = missingCollectionParts(collection, libraryByTmdb)
         scope.launch {
             val failures = try {
                 withContext(Dispatchers.IO) {
@@ -193,14 +189,7 @@ fun FilmsView(
     }
 
     val needle = search.trim().lowercase()
-    val visible = films.filter { entry ->
-        val seen = entry.viewings > 0u
-        when (tab) {
-            FilmTab.SEEN -> seen && (!favoritesOnly || entry.film.favorite)
-            FilmTab.BUCKET_LIST -> entry.film.watchlisted && !seen
-            FilmTab.COLLECTIONS -> true
-        } && (needle.isEmpty() || entry.film.title.lowercase().contains(needle))
-    }
+    val visible = visibleLibraryFilms(films, tab, favoritesOnly, search)
 
     Column(Modifier.fillMaxSize()) {
         Column(
@@ -444,27 +433,6 @@ private fun TmdbResultRow(
     }
 }
 
-private fun seenCount(
-    collection: Collection,
-    libraryByTmdb: Map<Long, FilmListEntry>,
-): Int = collection.parts.count { part ->
-    libraryByTmdb[part.tmdbId]?.viewings?.let { it > 0u } == true
-}
-
-private fun isComplete(
-    collection: Collection,
-    libraryByTmdb: Map<Long, FilmListEntry>,
-): Boolean = collection.parts.isNotEmpty() &&
-    seenCount(collection, libraryByTmdb) == collection.parts.size
-
-private fun missingParts(
-    collection: Collection,
-    libraryByTmdb: Map<Long, FilmListEntry>,
-): List<CollectionPart> = collection.parts.filter { part ->
-    val entry = libraryByTmdb[part.tmdbId]
-    entry == null || (entry.viewings == 0u && !entry.film.watchlisted)
-}
-
 @Composable
 private fun CollectionsList(
     films: List<FilmListEntry>,
@@ -513,9 +481,9 @@ private fun CollectionsList(
         return
     }
 
-    val completed = grouped.count { isComplete(it, libraryByTmdb) }
+    val completed = grouped.count { isCollectionComplete(it, libraryByTmdb) }
     val ordered = filtered.sortedWith(
-        compareBy<Collection> { if (isComplete(it, libraryByTmdb)) 1 else 0 }
+        compareBy<Collection> { if (isCollectionComplete(it, libraryByTmdb)) 1 else 0 }
             .thenBy { it.name.lowercase() },
     )
 
@@ -580,8 +548,8 @@ private fun CollectionCard(
     )
     val total = parts.size
     val seen = seenCount(collection, libraryByTmdb)
-    val complete = isComplete(collection, libraryByTmdb)
-    val missing = missingParts(collection, libraryByTmdb)
+    val complete = isCollectionComplete(collection, libraryByTmdb)
+    val missing = missingCollectionParts(collection, libraryByTmdb)
     val busy = addingCollection != null || addingTmdb != null
     Surface(
         modifier = Modifier.fillMaxWidth(),

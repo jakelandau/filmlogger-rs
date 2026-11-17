@@ -14,8 +14,8 @@ pub mod types;
 use std::sync::{Arc, Mutex};
 
 use crate::types::{
-    Collection, FilmId, FilmListEntry, FilmMetadata, FilmPage, Format, FormatCatalog, LoggerError,
-    Movie, NewLogDetails, RatingBoard, SearchPage, Settings, Stats, Venue, WatchLog,
+    Collection, FilmId, FilmListEntry, FilmMetadata, FilmPage, Format, FormatCatalog, FormatParts,
+    LoggerError, Movie, NewLogDetails, RatingBoard, SearchPage, Settings, Stats, Venue, WatchLog,
 };
 use filmlogger_rs::FilmLogger;
 
@@ -486,6 +486,41 @@ impl Logger {
             .format_catalog()
             .into()
     }
+}
+
+/// Flatten a stored format (or the venue's defaults) into catalog keys.
+#[must_use]
+#[uniffi::export]
+#[allow(clippy::needless_pass_by_value)]
+pub fn format_parts(format: Option<Format>, venue: Venue) -> FormatParts {
+    convert::format_parts(format, venue)
+}
+
+/// Build the format for `venue` from flattened catalog keys.
+#[must_use]
+#[uniffi::export]
+#[allow(clippy::needless_pass_by_value)]
+pub fn format_from_parts(parts: FormatParts, venue: Venue) -> Format {
+    convert::format_from_parts(&parts, venue)
+}
+
+/// Parse a canonical film key (`tt0137523` / `tmdb:550`).
+///
+/// # Errors
+///
+/// Returns [`LoggerError::InvalidFilmId`] if `key` is not a valid film key.
+#[uniffi::export]
+#[allow(clippy::needless_pass_by_value)]
+pub fn film_id_from_key(key: String) -> Result<FilmId, LoggerError> {
+    convert::film_id_from_key(&key)
+}
+
+/// The canonical storage/display key for a film id.
+#[must_use]
+#[uniffi::export]
+#[allow(clippy::needless_pass_by_value)]
+pub fn film_key_of(film_id: FilmId) -> String {
+    convert::film_key_of(&film_id)
 }
 
 uniffi::setup_scaffolding!();

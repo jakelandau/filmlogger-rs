@@ -203,19 +203,25 @@ Notes:
   build script's default NDK path is machine-specific. The bridge builds a host
   debug cdylib for bindgen and a release `aarch64-linux-android` cdylib for the
   app.
-- `npm ci` requires the committed `package-lock.json`; `npm run build` writes
-  `ui/dist`, which Tauri embeds. CI builds the UI before the release-mode shell.
+- `npm ci` requires the committed `package-lock.json`. The `ui` job builds
+  `ui/dist` and uploads it for the desktop rows; plain `cargo build` does not
+  run Tauri's `beforeBuildCommand`, while `tauri build` (release) does, so the
+  release does not pre-build the UI separately.
 - `apps/desktop/src-tauri/src/contract_tests.rs` parses `lib.rs` and
   `ui/src/api.ts` and fails when a command is missing from
   `generate_handler!` or `api.ts` (or vice versa). It requires every `api.ts`
   wrapper to keep the one-line `invoke<T>("name", ...)` shape.
 - CI (`.github/workflows/ci.yml`) runs Rust tests/clippy/fmt on Windows x64,
-  Windows ARM64, Linux, and macOS; a secret-gated live smoke on Ubuntu; the
-  desktop UI checks; a release-mode desktop shell on every platform and both
-  Windows architectures; and Android unit tests plus a debug APK. The Windows
-  ARM64 legs use the `windows-11-arm` hosted runner, so they build natively
-  rather than cross-compiling. The live-smoke gate must stay on the step, not
-  the job, because `env` is unavailable in a job-level `if`.
+  Windows ARM64, Linux x64, Linux ARM64, and macOS; a secret-gated live smoke
+  inside the Linux x64 test row; the desktop UI checks once; a release-mode
+  desktop shell on every platform and architecture; and Android unit tests plus
+  a debug APK. The ARM64 legs use GitHub's hosted `windows-11-arm` and
+  `ubuntu-24.04-arm` runners, so they build natively rather than
+  cross-compiling. Formatting runs once (it is platform-independent), clippy
+  runs on Linux x64 and Windows x64 (it only sees workspace crates), and the
+  `ui` job uploads `ui/dist` for the desktop rows instead of each row rebuilding
+  it. The live-smoke gate must stay on the step, not the job, because `env` is
+  unavailable in a job-level `if`.
 
 ### Testing conventions
 
@@ -257,12 +263,12 @@ Never commit secrets, keystores, signing properties, `.env`, or database files.
 
 Releases: never push a tag or create a release from an agent. Tags matching
 `v*` trigger `.github/workflows/release.yml` (Windows NSIS for x86_64 and
-aarch64, Linux AppImage, signed Android APK, Tauri updater metadata). The
-desktop matrix runs sequentially so tauri-action merges each platform into
-`latest.json`, yielding both `windows-x86_64` and `windows-aarch64`. macOS is
-CI-built but not published until notarization credentials exist. Versions are
-set by the workflow from the tag; Android uses the Actions run number as
-`versionCode`.
+aarch64, Linux AppImage for x86_64 and aarch64, signed Android APK, Tauri
+updater metadata). The desktop matrix runs sequentially so tauri-action merges
+each platform into `latest.json`, yielding `windows-x86_64`,
+`windows-aarch64`, `linux-x86_64`, and `linux-aarch64`. macOS is CI-built but
+not published until notarization credentials exist. Versions are set by the
+workflow from the tag; Android uses the Actions run number as `versionCode`.
 
 Updaters: desktop reads
 `https://github.com/jakelandau/filmlogger-rs/releases/latest/download/latest.json`

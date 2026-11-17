@@ -18,7 +18,8 @@ jobs:
       fail-fast: false
       # Sequential so each job's updater entry is merged into the release's
       # existing latest.json (tauri-action appends platforms, it does not
-      # rebuild the manifest), giving windows-x86_64 and windows-aarch64.
+      # rebuild the manifest), giving windows-x86_64, windows-aarch64,
+      # linux-x86_64, and linux-aarch64.
       max-parallel: 1
       matrix:
         include:
@@ -29,8 +30,11 @@ jobs:
             label: windows-aarch64
             args: --target aarch64-pc-windows-msvc --bundles nsis
           - os: ubuntu-latest
-            label: linux
-            args: --bundles appimage
+            label: linux-x86_64
+            args: --target x86_64-unknown-linux-gnu --bundles appimage
+          - os: ubuntu-24.04-arm
+            label: linux-aarch64
+            args: --target aarch64-unknown-linux-gnu --bundles appimage
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,15 +46,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install UI dependencies
         run: npm ci --prefix apps/desktop/ui
-      - name: Build UI
-        run: npm run build --prefix apps/desktop/ui
       - name: Set desktop version from tag
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           node -e "const fs=require('fs');const p='apps/desktop/src-tauri/tauri.conf.json';const c=JSON.parse(fs.readFileSync(p));c.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n')" "$VERSION"
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
       - name: Install Tauri system libraries
         if: runner.os == 'Linux'
         run: |

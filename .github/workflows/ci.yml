@@ -15,16 +15,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows ships x64 and ARM64 desktop builds, so both are tested on
-        # native hardware; macOS is built here so the Tauri app cannot regress
-        # on Apple platforms before we have a signed macOS release.
+        # Tests run on every architecture we ship. Formatting is
+        # platform-independent, and clippy only sees workspace crates (no
+        # platform cfg), so each runs once instead of once per row.
         include:
           - os: windows-latest
             label: windows-x64
           - os: windows-11-arm
             label: windows-arm64
           - os: ubuntu-latest
-            label: linux
+            label: linux-x64
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
           - os: macos-latest
             label: macos
     steps:
@@ -40,24 +42,18 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Test
         run: cargo test --workspace
+      # `env` is not a valid context in a job-level `if`, so the secret gate
+      # lives on the step; this reuses the Linux test row's build cache instead
+      # of paying for a separate job and toolchain setup.
+      - name: Live smoke (requires the TMDB_API_KEY secret)
+        if: matrix.label == 'linux-x64' && env.TMDB_API_KEY != ''
+        run: cargo run -p filmlogger-rs --example tmdb_smoke
       - name: Clippy
+        if: matrix.label == 'linux-x64' || matrix.label == 'windows-x64'
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Format
+        if: matrix.label == 'linux-x64'
         run: cargo fmt --all -- --check
-
-  live-smoke:
-    name: Live TMDB smoke
-    needs: rust
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      # `env` is not a valid context in a job-level `if`, so the gate lives on
-      # the step; the workflow-level `TMDB_API_KEY` env is visible here.
-      - name: Live smoke (requires the TMDB_API_KEY secret)
-        if: env.TMDB_API_KEY != ''
-        run: cargo run -p filmlogger-rs --example tmdb_smoke
 
   ui:
     name: Desktop UI
@@ -80,16 +76,27 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      # The desktop rows only need the built bundle; building it here once
+      # instead of per OS/arch avoids four redundant Vite builds.
+      - name: Share the UI bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: apps/desktop/ui/dist
+          if-no-files-found: error
+          retention-days: 1
 
   desktop:
     name: Desktop shell (${{ matrix.label }})
+    needs: ui
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # Same release-mode build the release workflow bundles, without the
-        # installer/notarization step: proves the UI assets embed and the Tauri
-        # shell links on every platform and Windows architecture we ship.
+        # installer/notarization step: proves the Tauri shell links on every
+        # platform and architecture we ship. The UI bundle comes from the `ui`
+        # job instead of being rebuilt here.
         include:
           - os: windows-latest
             label: windows-x64
@@ -98,29 +105,28 @@ jobs:
             label: windows-arm64
             buildArgs: --target aarch64-pc-windows-msvc
           - os: ubuntu-latest
-            label: linux
+            label: linux-x64
+            buildArgs: ""
+          - os: ubuntu-24.04-arm
+            label: linux-arm64
             buildArgs: ""
           - os: macos-latest
             label: macos
             buildArgs: ""
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/desktop/ui/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Download the UI bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: apps/desktop/ui/dist
       - name: Install Tauri system libraries
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      - name: Install UI dependencies
-        run: npm ci --prefix apps/desktop/ui
-      - name: Build UI
-        run: npm run build --prefix apps/desktop/ui
       - name: Build desktop shell (release, no bundle)
         run: cargo build --release -p filmlogger-rs-desktop ${{ matrix.buildArgs }}
 

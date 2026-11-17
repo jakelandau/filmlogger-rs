@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
 
 /** A prominent IMAX / DCI / FILM badge shown before the format summary. */
 @Composable
-fun FormatFamilyBadge(format: uniffi.film_logger_ffi.Format?) {
+fun FormatFamilyBadge(format: uniffi.filmlogger_rs_ffi.Format?) {
     val family = formatFamily(format) ?: return
     val background = when (family) {
         "IMAX" -> Color(0xFF243642)

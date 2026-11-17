@@ -19,8 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import ca.jakelandau.filmlogger.R
-import uniffi.film_logger_ffi.Format
-import uniffi.film_logger_ffi.ScreenClass
+import uniffi.filmlogger_rs_ffi.Format
+import uniffi.filmlogger_rs_ffi.ScreenClass
 
 enum class FormatFlag(val label: String, val iconRes: Int) {
     THREE_D("3D", R.drawable.ic_flag_3d),

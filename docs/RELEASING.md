@@ -80,7 +80,7 @@ remote updated accordingly before relying on the updater URLs.
 ## macOS
 
 CI builds the desktop shell in release mode on `macos-latest` (UI bundle plus
-`cargo build --release -p film-logger-desktop`), so an Apple-only regression
+`cargo build --release -p filmlogger-rs-desktop`), so an Apple-only regression
 fails the build instead of surfacing at the first macOS release.
 
 No macOS artifact is published: Gatekeeper blocks an unsigned or un-notarized

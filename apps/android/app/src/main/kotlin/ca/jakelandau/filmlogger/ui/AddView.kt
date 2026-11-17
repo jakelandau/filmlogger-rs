@@ -41,18 +41,18 @@ import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import uniffi.film_logger_ffi.FilmId
-import uniffi.film_logger_ffi.FilmMetadata
-import uniffi.film_logger_ffi.Format
-import uniffi.film_logger_ffi.FormatCatalog
-import uniffi.film_logger_ffi.Logger
-import uniffi.film_logger_ffi.LoggerException
-import uniffi.film_logger_ffi.Movie
-import uniffi.film_logger_ffi.MovieSummary
-import uniffi.film_logger_ffi.NewLogDetails
-import uniffi.film_logger_ffi.Rating
-import uniffi.film_logger_ffi.SearchPage
-import uniffi.film_logger_ffi.Venue
+import uniffi.filmlogger_rs_ffi.FilmId
+import uniffi.filmlogger_rs_ffi.FilmMetadata
+import uniffi.filmlogger_rs_ffi.Format
+import uniffi.filmlogger_rs_ffi.FormatCatalog
+import uniffi.filmlogger_rs_ffi.Logger
+import uniffi.filmlogger_rs_ffi.LoggerException
+import uniffi.filmlogger_rs_ffi.Movie
+import uniffi.filmlogger_rs_ffi.MovieSummary
+import uniffi.filmlogger_rs_ffi.NewLogDetails
+import uniffi.filmlogger_rs_ffi.Rating
+import uniffi.filmlogger_rs_ffi.SearchPage
+import uniffi.filmlogger_rs_ffi.Venue
 
 /** The selected search/finder result the user is about to log. */
 data class SelectedFilm(

@@ -1,4 +1,4 @@
-//! `film_logger` — core library for the `FilmLogger` products.
+//! `filmlogger_rs` — core library for the `FilmLogger` products.
 //!
 //! Records films the user watches (when, in UTC, and where: theatre or home)
 //! and resolves/enriches them through the TMDB API. The log persists in a

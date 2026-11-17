@@ -30,11 +30,11 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import uniffi.film_logger_ffi.Certifications
-import uniffi.film_logger_ffi.FilmMetadata
-import uniffi.film_logger_ffi.FilmPage
-import uniffi.film_logger_ffi.Logger
-import uniffi.film_logger_ffi.LoggerException
+import uniffi.filmlogger_rs_ffi.Certifications
+import uniffi.filmlogger_rs_ffi.FilmMetadata
+import uniffi.filmlogger_rs_ffi.FilmPage
+import uniffi.filmlogger_rs_ffi.Logger
+import uniffi.filmlogger_rs_ffi.LoggerException
 
 /** One film's page: metadata, user state, statistics, and history. */
 @Composable
@@ -256,7 +256,7 @@ fun FilmView(
                     log.rating?.let {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            if (it == uniffi.film_logger_ffi.Rating.UP) "👍 Liked" else "👎 Disliked",
+                            if (it == uniffi.filmlogger_rs_ffi.Rating.UP) "👍 Liked" else "👎 Disliked",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

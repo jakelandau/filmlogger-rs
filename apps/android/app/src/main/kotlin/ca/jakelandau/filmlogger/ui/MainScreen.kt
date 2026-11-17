@@ -40,15 +40,15 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import uniffi.film_logger_ffi.FilmId
-import uniffi.film_logger_ffi.FilmListEntry
-import uniffi.film_logger_ffi.FilmMetadata
-import uniffi.film_logger_ffi.FilmPage
-import uniffi.film_logger_ffi.FormatCatalog
-import uniffi.film_logger_ffi.Logger
-import uniffi.film_logger_ffi.RatingBoard
-import uniffi.film_logger_ffi.Stats
-import uniffi.film_logger_ffi.WatchLog
+import uniffi.filmlogger_rs_ffi.FilmId
+import uniffi.filmlogger_rs_ffi.FilmListEntry
+import uniffi.filmlogger_rs_ffi.FilmMetadata
+import uniffi.filmlogger_rs_ffi.FilmPage
+import uniffi.filmlogger_rs_ffi.FormatCatalog
+import uniffi.filmlogger_rs_ffi.Logger
+import uniffi.filmlogger_rs_ffi.RatingBoard
+import uniffi.filmlogger_rs_ffi.Stats
+import uniffi.filmlogger_rs_ffi.WatchLog
 
 private const val TABS_LOGS = 0
 private const val TABS_FILMS = 1

@@ -35,10 +35,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDateTime
-import uniffi.film_logger_ffi.Format
-import uniffi.film_logger_ffi.FormatCatalog
-import uniffi.film_logger_ffi.Rating
-import uniffi.film_logger_ffi.Venue
+import uniffi.filmlogger_rs_ffi.Format
+import uniffi.filmlogger_rs_ffi.FormatCatalog
+import uniffi.filmlogger_rs_ffi.Rating
+import uniffi.filmlogger_rs_ffi.Venue
 
 /**
  * The venue, viewing-format, watched-at, rating, and notes controls shared by

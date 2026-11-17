@@ -1003,7 +1003,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "film-logger"
+name = "filmlogger-rs"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -1018,10 +1018,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "film-logger-desktop"
+name = "filmlogger-rs-desktop"
 version = "0.1.0"
 dependencies = [
- "film-logger",
+ "filmlogger-rs",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -1031,11 +1031,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "film-logger-ffi"
+name = "filmlogger-rs-ffi"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "film-logger",
+ "filmlogger-rs",
  "serde_json",
  "uniffi",
 ]

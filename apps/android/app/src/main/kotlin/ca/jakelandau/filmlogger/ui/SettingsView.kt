@@ -46,10 +46,10 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import uniffi.film_logger_ffi.Logger
-import uniffi.film_logger_ffi.LoggerException
-import uniffi.film_logger_ffi.RatingBoard
-import uniffi.film_logger_ffi.Settings
+import uniffi.filmlogger_rs_ffi.Logger
+import uniffi.filmlogger_rs_ffi.LoggerException
+import uniffi.filmlogger_rs_ffi.RatingBoard
+import uniffi.filmlogger_rs_ffi.Settings
 import java.io.File
 
 /**

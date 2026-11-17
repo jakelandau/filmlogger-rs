@@ -2,9 +2,9 @@ package ca.jakelandau.filmlogger.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import uniffi.film_logger_ffi.Format
-import uniffi.film_logger_ffi.HomeMedium
-import uniffi.film_logger_ffi.Venue
+import uniffi.filmlogger_rs_ffi.Format
+import uniffi.filmlogger_rs_ffi.HomeMedium
+import uniffi.filmlogger_rs_ffi.Venue
 
 class HomeFormatTest {
     @Test

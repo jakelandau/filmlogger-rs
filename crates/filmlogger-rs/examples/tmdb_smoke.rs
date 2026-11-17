@@ -7,8 +7,8 @@
 //! cargo run --example tmdb_smoke
 //! ```
 
-use film_logger::domain::{Format, HomeMedium};
-use film_logger::{Store, TmdbClient, Venue, WatchLog};
+use filmlogger_rs::domain::{Format, HomeMedium};
+use filmlogger_rs::{Store, TmdbClient, Venue, WatchLog};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = TmdbClient::from_compiled_key().expect(

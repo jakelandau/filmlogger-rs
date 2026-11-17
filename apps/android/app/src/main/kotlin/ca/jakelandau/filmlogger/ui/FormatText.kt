@@ -1,13 +1,13 @@
 package ca.jakelandau.filmlogger.ui
 
-import uniffi.film_logger_ffi.Dci
-import uniffi.film_logger_ffi.Film
-import uniffi.film_logger_ffi.Format
-import uniffi.film_logger_ffi.HomeMedium
-import uniffi.film_logger_ffi.Imax
-import uniffi.film_logger_ffi.Projection
-import uniffi.film_logger_ffi.ScreenClass
-import uniffi.film_logger_ffi.Venue
+import uniffi.filmlogger_rs_ffi.Dci
+import uniffi.filmlogger_rs_ffi.Film
+import uniffi.filmlogger_rs_ffi.Format
+import uniffi.filmlogger_rs_ffi.HomeMedium
+import uniffi.filmlogger_rs_ffi.Imax
+import uniffi.filmlogger_rs_ffi.Projection
+import uniffi.filmlogger_rs_ffi.ScreenClass
+import uniffi.filmlogger_rs_ffi.Venue
 
 /** Display label for the projection family; `null` when no format is stored. */
 fun formatFamily(format: Format?): String? = when (format) {

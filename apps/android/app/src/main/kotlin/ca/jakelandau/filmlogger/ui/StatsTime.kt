@@ -1,7 +1,7 @@
 package ca.jakelandau.filmlogger.ui
 
 import java.time.Instant
-import uniffi.film_logger_ffi.WatchLog
+import uniffi.filmlogger_rs_ffi.WatchLog
 
 /**
  * Weekday and hour-of-day buckets for the Stats tab. The core aggregates

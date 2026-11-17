@@ -2,8 +2,8 @@
 //! mock TMDB: add films, log viewings, read the film library, export/import
 //! the database, and check the aggregate breakdowns.
 
-use film_logger::domain::{Dci, FilmId, Format, HomeMedium, Imax, Projection, ScreenClass};
-use film_logger::{Error, FilmLogger, NewLogDetails, Rating, TmdbClient, Venue, WatchLog};
+use filmlogger_rs::domain::{Dci, FilmId, Format, HomeMedium, Imax, Projection, ScreenClass};
+use filmlogger_rs::{Error, FilmLogger, NewLogDetails, Rating, TmdbClient, Venue, WatchLog};
 use serde_json::{Value, json};
 use tokio::runtime::Builder;
 use wiremock::matchers::path;

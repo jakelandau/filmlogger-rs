@@ -45,13 +45,13 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import uniffi.film_logger_ffi.Collection
-import uniffi.film_logger_ffi.CollectionPart
-import uniffi.film_logger_ffi.FilmListEntry
-import uniffi.film_logger_ffi.Logger
-import uniffi.film_logger_ffi.LoggerException
-import uniffi.film_logger_ffi.MovieSummary
-import uniffi.film_logger_ffi.SearchPage
+import uniffi.filmlogger_rs_ffi.Collection
+import uniffi.filmlogger_rs_ffi.CollectionPart
+import uniffi.filmlogger_rs_ffi.FilmListEntry
+import uniffi.filmlogger_rs_ffi.Logger
+import uniffi.filmlogger_rs_ffi.LoggerException
+import uniffi.filmlogger_rs_ffi.MovieSummary
+import uniffi.filmlogger_rs_ffi.SearchPage
 
 private enum class FilmTab { SEEN, BUCKET_LIST, COLLECTIONS }
 

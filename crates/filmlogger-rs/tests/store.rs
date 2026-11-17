@@ -1,8 +1,8 @@
 //! Integration tests for the SQLite store, using temp files where
 //! cross-instance behaviour (migration, export/import) is under test.
 
-use film_logger::domain::{Dci, FilmId, Format, HomeMedium, Projection, ScreenClass};
-use film_logger::{Error, FilmMetadata, Store, Venue, WatchLog};
+use filmlogger_rs::domain::{Dci, FilmId, Format, HomeMedium, Projection, ScreenClass};
+use filmlogger_rs::{Error, FilmMetadata, Store, Venue, WatchLog};
 use rusqlite::Connection;
 
 /// A valid log for tests: a [`WatchLog::now`] with a format attached,

@@ -2,9 +2,9 @@ package ca.jakelandau.filmlogger.ui
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import uniffi.film_logger_ffi.FilmId
-import uniffi.film_logger_ffi.Venue
-import uniffi.film_logger_ffi.WatchLog
+import uniffi.filmlogger_rs_ffi.FilmId
+import uniffi.filmlogger_rs_ffi.Venue
+import uniffi.filmlogger_rs_ffi.WatchLog
 
 /** Mirrors the desktop `stats-time.test.ts` fixtures exactly. */
 class StatsTimeTest {

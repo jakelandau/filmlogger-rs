@@ -28,13 +28,13 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import uniffi.film_logger_ffi.Format
-import uniffi.film_logger_ffi.FormatCatalog
-import uniffi.film_logger_ffi.Logger
-import uniffi.film_logger_ffi.LoggerException
-import uniffi.film_logger_ffi.Rating
-import uniffi.film_logger_ffi.Venue
-import uniffi.film_logger_ffi.WatchLog
+import uniffi.filmlogger_rs_ffi.Format
+import uniffi.filmlogger_rs_ffi.FormatCatalog
+import uniffi.filmlogger_rs_ffi.Logger
+import uniffi.filmlogger_rs_ffi.LoggerException
+import uniffi.filmlogger_rs_ffi.Rating
+import uniffi.filmlogger_rs_ffi.Venue
+import uniffi.filmlogger_rs_ffi.WatchLog
 
 /**
  * Edit an existing watch log in place. The store derives `rewatch` and

@@ -1,6 +1,6 @@
-//! The Android FFI crate for `film-logger`.
+//! The Android FFI crate for `filmlogger-rs`.
 //!
-//! Exposes the [`film_logger`] facade to Kotlin via uniffi. The uniffi surface
+//! Exposes the [`filmlogger_rs`] facade to Kotlin via uniffi. The uniffi surface
 //! is defined in [`types`] (DTOs) and [`convert`] (conversions); this module
 //! wires the [`Logger`] object over the core [`FilmLogger`].
 //!
@@ -17,7 +17,7 @@ use crate::types::{
     Collection, FilmId, FilmListEntry, FilmMetadata, FilmPage, Format, FormatCatalog, LoggerError,
     Movie, NewLogDetails, RatingBoard, SearchPage, Settings, Stats, Venue, WatchLog,
 };
-use film_logger::FilmLogger;
+use filmlogger_rs::FilmLogger;
 
 /// The shared logger, behind a mutex because methods may need mutable access
 /// (e.g. import).

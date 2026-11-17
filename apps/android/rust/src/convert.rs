@@ -1,4 +1,4 @@
-//! Conversions between [`film_logger`] core types and this crate's uniffi DTOs.
+//! Conversions between [`filmlogger_rs`] core types and this crate's uniffi DTOs.
 
 use chrono::{DateTime, Utc};
 
@@ -10,7 +10,7 @@ use crate::types::{
     RatingBoard, RatingCounts, ScreenClass, SearchPage, Settings, Stats, Venue, VenueCounts,
     WatchLog, YearCount,
 };
-use film_logger as core;
+use filmlogger_rs as core;
 
 // --- Venue -----------------------------------------------------------------
 

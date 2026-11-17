@@ -1,6 +1,6 @@
 //! Uniffi DTO types for the Android FFI surface.
 //!
-//! These mirror [`film_logger`]'s domain types, but restricted to uniffi's
+//! These mirror [`filmlogger_rs`]'s domain types, but restricted to uniffi's
 //! supported data shapes (no `DateTime<Utc>`, `usize`, or `BTreeMap`).
 //! `watched_at` is carried as an RFC 3339 string, and `viewings_by_year` as a
 //! vector of [`YearCount`].

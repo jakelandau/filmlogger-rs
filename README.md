@@ -8,11 +8,11 @@ Three products live here:
 
 | # | Product | Location | Status |
 |---|---------|----------|--------|
-| 1 | Core library (Rust) | `crates/film-logger` | Stable |
+| 1 | Core library (Rust) | `crates/filmlogger-rs` | Stable |
 | 2 | Desktop app (Windows / Linux) | `apps/desktop` | Stable |
 | 3 | Android native app | `apps/android` | Stable |
 
-The core library (`film-logger`) records each film you watch — **when**
+The core library (`filmlogger-rs`) records each film you watch — **when**
 (device-local wall time translated to UTC via the device's current timezone),
 **where** (theatre or home), and other details (notes, denormalized film
 metadata). Films are identified by **IMDB ID** (e.g. `tt0137523`), falling back
@@ -21,7 +21,7 @@ blocking `reqwest` client, so every app calls it from a worker thread; it is
 platform-agnostic, and the desktop and Android apps consume it directly (the
 Android app through a `uniffi` bridge).
 
-## Quickstart (product 1: `crates/film-logger`)
+## Quickstart (product 1: `crates/filmlogger-rs`)
 
 ```sh
 # Build
@@ -31,7 +31,7 @@ cargo build
 cargo test --workspace
 
 # Live smoke test against api.themoviedb.org (needs a TMDB key)
-cargo run -p film-logger --example tmdb_smoke
+cargo run -p filmlogger-rs --example tmdb_smoke
 ```
 
 The live smoke test needs the TMDB key **baked in at compile time**. Set

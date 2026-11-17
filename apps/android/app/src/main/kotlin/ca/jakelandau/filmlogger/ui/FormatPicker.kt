@@ -20,11 +20,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import uniffi.film_logger_ffi.Format
-import uniffi.film_logger_ffi.FormatCatalog
-import uniffi.film_logger_ffi.FormatGroup
-import uniffi.film_logger_ffi.FormatLegality
-import uniffi.film_logger_ffi.Venue
+import uniffi.filmlogger_rs_ffi.Format
+import uniffi.filmlogger_rs_ffi.FormatCatalog
+import uniffi.filmlogger_rs_ffi.FormatGroup
+import uniffi.filmlogger_rs_ffi.FormatLegality
+import uniffi.filmlogger_rs_ffi.Venue
 
 private fun options(group: FormatGroup?): List<Pair<String, String>> =
     group?.options?.map { it.key to it.label } ?: emptyList()

@@ -40,9 +40,9 @@ import ca.jakelandau.filmlogger.R
 import coil.compose.AsyncImage
 import java.time.Instant
 import java.time.ZoneOffset
-import uniffi.film_logger_ffi.Rating
-import uniffi.film_logger_ffi.Venue
-import uniffi.film_logger_ffi.WatchLog
+import uniffi.filmlogger_rs_ffi.Rating
+import uniffi.filmlogger_rs_ffi.Venue
+import uniffi.filmlogger_rs_ffi.WatchLog
 
 private enum class LogSort { RECENT, OLDEST, TITLE, RATING }
 

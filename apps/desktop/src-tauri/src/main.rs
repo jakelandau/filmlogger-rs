@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    film_logger_desktop::run();
+    filmlogger_rs_desktop::run();
 }

@@ -1,4 +1,4 @@
-//! The desktop frontend: Tauri wiring over the [`film_logger`] facade.
+//! The desktop frontend: Tauri wiring over the [`filmlogger_rs`] facade.
 //!
 //! Blocking work (TMDB requests, SQLite reads/writes) runs on Tauri's
 //! blocking pool whenever it can, so the IPC thread never blocks the webview.
@@ -9,7 +9,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use film_logger::{
+use filmlogger_rs::{
     Collection, FilmId, FilmListEntry, FilmLogger, FilmMetadata, FilmPage, Format, FormatCatalog,
     Movie, NewLogDetails, RatingBoard, SearchPage, Settings, Stats, TmdbClient, Venue, WatchLog,
 };
@@ -25,7 +25,7 @@ pub struct AppState {
 async fn run_blocking<T, F>(state: &AppState, f: F) -> Result<T, String>
 where
     T: Send + 'static,
-    F: FnOnce(&FilmLogger) -> Result<T, film_logger::Error> + Send + 'static,
+    F: FnOnce(&FilmLogger) -> Result<T, filmlogger_rs::Error> + Send + 'static,
 {
     let logger = Arc::clone(&state.logger);
     tauri::async_runtime::spawn_blocking(move || {
@@ -288,7 +288,7 @@ async fn add_to_watchlist(
 /// The viewing-format catalog.
 #[tauri::command]
 fn format_catalog() -> FormatCatalog {
-    film_logger::format_catalog()
+    filmlogger_rs::format_catalog()
 }
 
 /// Start the desktop application.

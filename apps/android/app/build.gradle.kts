@@ -131,12 +131,12 @@ val rustDir: File = androidDir.resolve("rust")
 val workspaceTarget: File = androidDir.parentFile.parentFile.resolve("target")
 val hostCdylib: File = workspaceTarget.resolve(
     if (System.getProperty("os.name").startsWith("Windows")) {
-        "debug/film_logger_ffi.dll"
+        "debug/filmlogger_rs_ffi.dll"
     } else {
-        "debug/libfilm_logger_ffi.so"
+        "debug/libfilmlogger_rs_ffi.so"
     },
 )
-val armCdylib: File = workspaceTarget.resolve("aarch64-linux-android/release/libfilm_logger_ffi.so")
+val armCdylib: File = workspaceTarget.resolve("aarch64-linux-android/release/libfilmlogger_rs_ffi.so")
 val generatedKotlinDir: File = file("src/main/kotlin")
 val generatedJniLibs: File = file("build/generated/jniLibs")
 val cargoBin: String = providers
@@ -151,7 +151,7 @@ val ndkRoot: String = providers
     .orElse("C:/Users/jakel/AppData/Local/Android/Sdk/ndk/30.0.15729638")
     .get()
 // The TMDB Read Access Token, baked into the Rust cdylib at compile time
-// (see `crates/film-logger/build.rs`). Gradle daemons hide shell
+// (see `crates/filmlogger-rs/build.rs`). Gradle daemons hide shell
 // environment from `Exec` tasks, so the key passes as a Gradle property:
 // `-PtmdbApiKey=...`. Absent, the builds produce a keyless cdylib and the
 // app fails with `NoCompiledApiKey` at `Logger.open`.
@@ -184,7 +184,7 @@ val generateKotlin = tasks.register<Exec>("generateKotlin") {
     commandLine(
         cargoBin, "run", "--example", "bindgen",
         "--", "generate", "-l", "kotlin",
-        "--crate", "film_logger_ffi",
+        "--crate", "filmlogger_rs_ffi",
         "--out-dir", generatedKotlinDir.absolutePath,
         hostCdylib.absolutePath,
     )

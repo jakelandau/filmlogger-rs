@@ -1,5 +1,5 @@
 [package]
-name = "film-logger-ffi"
+name = "filmlogger-rs-ffi"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -7,13 +7,13 @@ license.workspace = true
 repository.workspace = true
 
 [lib]
-name = "film_logger_ffi"
+name = "filmlogger_rs_ffi"
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
 chrono = { workspace = true }
 serde_json = { workspace = true }
-film-logger = { path = "../../../crates/film-logger" }
+filmlogger-rs = { path = "../../../crates/filmlogger-rs" }
 uniffi = { version = "0.32" }
 
 [dev-dependencies]

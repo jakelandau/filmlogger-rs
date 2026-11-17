@@ -26,10 +26,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
-import uniffi.film_logger_ffi.CountEntry
-import uniffi.film_logger_ffi.FormatCatalog
-import uniffi.film_logger_ffi.Stats
-import uniffi.film_logger_ffi.WatchLog
+import uniffi.filmlogger_rs_ffi.CountEntry
+import uniffi.filmlogger_rs_ffi.FormatCatalog
+import uniffi.filmlogger_rs_ffi.Stats
+import uniffi.filmlogger_rs_ffi.WatchLog
 
 /**
  * Aggregate statistics over the stored logs. Section order, labels, and

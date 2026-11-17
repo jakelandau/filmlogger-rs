@@ -1,5 +1,5 @@
 [package]
-name = "film-logger"
+name = "filmlogger-rs"
 version = "0.1.0"
 description = "Core library for the FilmLogger products: a TMDB-backed watch log stored in SQLite"
 edition.workspace = true
@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [lib]
-name = "film_logger"
+name = "filmlogger_rs"
 path = "src/lib.rs"
 
 [dependencies]

@@ -1,4 +1,4 @@
-// Thin wrappers over the Tauri IPC commands exposed by the `film-logger`
+// Thin wrappers over the Tauri IPC commands exposed by the `filmlogger-rs-desktop`
 // desktop binary. Argument names are camelCase on the JS side; Tauri maps
 // them to the Rust snake_case parameters. Struct fields keep their Rust
 // snake_case names (Tauri only converts command argument names).

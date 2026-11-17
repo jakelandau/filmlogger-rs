@@ -1,5 +1,5 @@
 [package]
-name = "film-logger-desktop"
+name = "filmlogger-rs-desktop"
 version = "0.1.0"
 description = "FilmLogger desktop application (Tauri)"
 edition.workspace = true
@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [lib]
-name = "film_logger_desktop"
+name = "filmlogger_rs_desktop"
 path = "src/lib.rs"
 
 [features]
@@ -17,7 +17,7 @@ path = "src/lib.rs"
 custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
-film-logger = { path = "../../../crates/film-logger" }
+filmlogger-rs = { path = "../../../crates/filmlogger-rs" }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"

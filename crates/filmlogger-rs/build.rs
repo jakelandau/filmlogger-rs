@@ -5,7 +5,7 @@
 //! hide shell environment from cargo); other builds take it from the
 //! environment directly. On GitHub Actions it is a repository secret. It is re-emitted as a compile-time
 //! environment variable (`cargo:rustc-env`) and embedded in
-//! [`film_logger::tmdb::COMPILED_API_KEY`] via `option_env!`, so a running
+//! [`filmlogger_rs::tmdb::COMPILED_API_KEY`] via `option_env!`, so a running
 //! process never reads the environment. When the variable is absent the
 //! crate still builds (the key is simply `None` at runtime).
 

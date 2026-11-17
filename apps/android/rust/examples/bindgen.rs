@@ -3,8 +3,8 @@
 //!
 //! Usage (generate Kotlin bindings from the compiled cdylib):
 //! ```sh
-//! cargo run -p film-logger-ffi --example bindgen -- generate \
-//!     -l kotlin --crate film_logger_ffi --out-dir <dir> <cdylib>
+//! cargo run -p filmlogger-rs-ffi --example bindgen -- generate \
+//!     -l kotlin --crate filmlogger_rs_ffi --out-dir <dir> <cdylib>
 //! ```
 
 fn main() {

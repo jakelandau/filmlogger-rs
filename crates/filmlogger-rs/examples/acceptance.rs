@@ -6,8 +6,8 @@
 //! cargo run --example acceptance
 //! ```
 
-use film_logger::domain::{Dci, Format, HomeMedium, Projection, ScreenClass};
-use film_logger::{FilmLogger, NewLogDetails, TmdbClient, Venue, WatchLog};
+use filmlogger_rs::domain::{Dci, Format, HomeMedium, Projection, ScreenClass};
+use filmlogger_rs::{FilmLogger, NewLogDetails, TmdbClient, Venue, WatchLog};
 use serde_json::{Value, from_str};
 use tokio::runtime::Builder;
 use wiremock::matchers::path;
@@ -106,7 +106,7 @@ fn main() {
     );
 
     // A home viewing of a different film, added without TMDB.
-    let mut home = WatchLog::now(film_logger::FilmId::Tmdb(999), "A Home Film", Venue::Home);
+    let mut home = WatchLog::now(filmlogger_rs::FilmId::Tmdb(999), "A Home Film", Venue::Home);
     home.format = Some(Format::Home {
         medium: HomeMedium::BluRay,
         three_d: false,

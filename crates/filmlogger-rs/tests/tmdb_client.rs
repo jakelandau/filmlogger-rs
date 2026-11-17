@@ -4,8 +4,8 @@
 //! [`MockServer`] setup is driven on a throwaway tokio runtime, after which
 //! the client calls block on the current thread.
 
-use film_logger::Error;
-use film_logger::tmdb::TmdbClient;
+use filmlogger_rs::Error;
+use filmlogger_rs::tmdb::TmdbClient;
 use serde_json::{Value, from_str};
 use tokio::runtime::Builder;
 use wiremock::matchers::{header, path, query_param, query_param_is_missing};

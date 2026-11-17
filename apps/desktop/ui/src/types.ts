@@ -1,5 +1,5 @@
 // IPC boundary types. These mirror the Rust `serde` shapes of the
-// `film-logger` domain exactly; the Rust side is the source of truth.
+// `filmlogger-rs` domain exactly; the Rust side is the source of truth.
 
 export type Venue = "theatre" | "home";
 export type Rating = "up" | "down";

@@ -216,12 +216,14 @@ Notes:
   inside the Linux x64 test row; the desktop UI checks once; a release-mode
   desktop shell on every platform and architecture; and Android unit tests plus
   a debug APK. The ARM64 legs use GitHub's hosted `windows-11-arm` and
-  `ubuntu-24.04-arm` runners, so they build natively rather than
-  cross-compiling. Formatting runs once (it is platform-independent), clippy
-  runs on Linux x64 and Windows x64 (it only sees workspace crates), and the
-  `ui` job uploads `ui/dist` for the desktop rows instead of each row rebuilding
-  it. The live-smoke gate must stay on the step, not the job, because `env` is
-  unavailable in a job-level `if`.
+  `ubuntu-22.04-arm` runners, so they build natively rather than
+  cross-compiling. Linux rows are pinned to `ubuntu-22.04` (glibc 2.35), the
+  release build host; do not move them to a newer image, because the AppImage
+  inherits that glibc floor. Formatting runs once (it is platform-independent),
+  clippy runs on Linux x64 and Windows x64 (it only sees workspace crates), and
+  the `ui` job uploads `ui/dist` for the desktop rows instead of each row
+  rebuilding it. The live-smoke gate must stay on the step, not the job, because
+  `env` is unavailable in a job-level `if`.
 
 ### Testing conventions
 
@@ -263,12 +265,13 @@ Never commit secrets, keystores, signing properties, `.env`, or database files.
 
 Releases: never push a tag or create a release from an agent. Tags matching
 `v*` trigger `.github/workflows/release.yml` (Windows NSIS for x86_64 and
-aarch64, Linux AppImage for x86_64 and aarch64, signed Android APK, Tauri
-updater metadata). The desktop matrix runs sequentially so tauri-action merges
-each platform into `latest.json`, yielding `windows-x86_64`,
-`windows-aarch64`, `linux-x86_64`, and `linux-aarch64`. macOS is CI-built but
-not published until notarization credentials exist. Versions are set by the
-workflow from the tag; Android uses the Actions run number as `versionCode`.
+aarch64, Linux AppImage for x86_64 and aarch64 built on Ubuntu 22.04 so the
+binary needs glibc 2.35+, signed Android APK, Tauri updater metadata). The
+desktop matrix runs sequentially so tauri-action merges each platform into
+`latest.json`, yielding `windows-x86_64`, `windows-aarch64`, `linux-x86_64`,
+and `linux-aarch64`. macOS is CI-built but not published until notarization
+credentials exist. Versions are set by the workflow from the tag; Android uses
+the Actions run number as `versionCode`.
 
 Updaters: desktop reads
 `https://github.com/jakelandau/filmlogger-rs/releases/latest/download/latest.json`

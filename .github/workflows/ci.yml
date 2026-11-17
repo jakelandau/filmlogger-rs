@@ -15,17 +15,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Tests run on every architecture we ship. Formatting is
-        # platform-independent, and clippy only sees workspace crates (no
-        # platform cfg), so each runs once instead of once per row.
+        # Tests run on every architecture we ship. Linux uses the oldest
+        # supported LTS (22.04, glibc 2.35) because that is the release build
+        # host, so a newer-glibc-only dependency fails here instead of shipping.
+        # Formatting runs once and clippy on the two x64 rows (see the steps).
         include:
           - os: windows-latest
             label: windows-x64
           - os: windows-11-arm
             label: windows-arm64
-          - os: ubuntu-24.04
+          - os: ubuntu-22.04
             label: linux-x64
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-22.04-arm
             label: linux-arm64
           - os: macos-latest
             label: macos
@@ -95,8 +96,9 @@ jobs:
       matrix:
         # Same release-mode build the release workflow bundles, without the
         # installer/notarization step: proves the Tauri shell links on every
-        # platform and architecture we ship. The UI bundle comes from the `ui`
-        # job instead of being rebuilt here.
+        # platform and architecture we ship. Linux uses the release host
+        # (22.04, glibc 2.35) so the AppImage glibc floor is exercised here.
+        # The UI bundle comes from the `ui` job instead of being rebuilt here.
         include:
           - os: windows-latest
             label: windows-x64
@@ -104,10 +106,10 @@ jobs:
           - os: windows-11-arm
             label: windows-arm64
             buildArgs: --target aarch64-pc-windows-msvc
-          - os: ubuntu-24.04
+          - os: ubuntu-22.04
             label: linux-x64
             buildArgs: ""
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-22.04-arm
             label: linux-arm64
             buildArgs: ""
           - os: macos-latest

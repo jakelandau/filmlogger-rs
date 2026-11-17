@@ -31,6 +31,9 @@ example `## [0.1.0] - 2026-11-15`.
 - CI for the Rust core, desktop UI, and Android APK on Windows x64/ARM64,
   Linux x64/ARM64, and macOS, plus tagged-release installer builds for Windows
   and Linux on x86_64 and ARM64 and a signed Android release APK.
+- Linux AppImages are built on Ubuntu 22.04 (glibc 2.35), so they run on the
+  oldest supported LTS and newer distributions rather than requiring a recent
+  glibc.
 - Automatic update checks on launch, plus manual “Check for Updates” buttons
   on desktop and Android. Releases publish Tauri updater signatures and
   `latest.json`; Android downloads the release APK and opens the installer.

@@ -20,6 +20,10 @@ jobs:
       # existing latest.json (tauri-action appends platforms, it does not
       # rebuild the manifest), giving windows-x86_64, windows-aarch64,
       # linux-x86_64, and linux-aarch64.
+      #
+      # Linux is built on 22.04 (glibc 2.35), the oldest supported LTS: an
+      # AppImage does not bundle glibc, so the build host sets the minimum
+      # glibc users need. Do not move these rows to a newer image casually.
       max-parallel: 1
       matrix:
         include:
@@ -29,10 +33,10 @@ jobs:
           - os: windows-11-arm
             label: windows-aarch64
             args: --target aarch64-pc-windows-msvc --bundles nsis
-          - os: ubuntu-24.04
+          - os: ubuntu-22.04
             label: linux-x86_64
             args: --target x86_64-unknown-linux-gnu --bundles appimage
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-22.04-arm
             label: linux-aarch64
             args: --target aarch64-unknown-linux-gnu --bundles appimage
     steps:

@@ -10,9 +10,18 @@ Pushing the tag runs `.github/workflows/release.yml`, which builds and attaches:
   `windows-x86_64`, `windows-aarch64`, `linux-x86_64`, and `linux-aarch64`
 
 The jobs build natively on `windows-latest` (x64), `windows-11-arm` (ARM64),
-`ubuntu-latest` (x64), and `ubuntu-24.04-arm` (ARM64); the matrix is sequential
+`ubuntu-22.04` (x64), and `ubuntu-22.04-arm` (ARM64); the matrix is sequential
 so tauri-action merges each job's updater entry into the release's existing
 `latest.json`.
+
+## Linux compatibility
+
+The AppImage is built on Ubuntu 22.04 and does not bundle glibc, so it requires
+glibc 2.35 or newer (Ubuntu 22.04+, Debian 12+, Fedora 36+) and a WebKitGTK
+4.1 runtime on the host. Keep the Linux release rows on the oldest supported
+LTS; moving them to a newer image raises the glibc floor and breaks older
+distributions. `ci.yml` builds the release-mode shell on the same image so a
+newer-glibc-only dependency fails before a tag is cut.
 
 No tag or release is pushed by the agent.
 

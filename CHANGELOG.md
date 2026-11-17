@@ -69,6 +69,15 @@ example `## [0.1.0] - 2026-11-15`.
 - Android's document picker accepts any file type for import, so a desktop
   export synced through Drive or Downloads can be chosen.
 - Importing a database invalidates each app's cached film and collection data.
+- Desktop database and TMDB commands now all run on Tauri's blocking pool, so a
+  list reload, export, or import no longer freezes the window.
+- Reading one viewing or one film page no longer loads the whole library, and
+  the Stats tab aggregates without hydrating logs, so large databases open
+  faster.
+- The film-library payload carries only the fields the Films tab and collection
+  cards render; full metadata loads with a film page.
+- Android now takes its format keys and film keys from the Rust core instead of
+  its own tables, so a core key change cannot leave the app behind.
 
 ### Removed
 

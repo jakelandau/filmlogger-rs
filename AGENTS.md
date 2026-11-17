@@ -39,9 +39,10 @@ Core library (`crates/filmlogger-rs/src`):
 - `error.rs` — `thiserror` variants.
 
 Desktop bridge: `apps/desktop/src-tauri/src/lib.rs` holds the Tauri commands,
-`run_blocking`, and app bootstrap; `ui/src/api.ts` is the sole IPC wrapper;
-`ui/src/types.ts` mirrors the Rust serde shapes; `ui/src/stats-time.ts` computes
-the weekday/hour buckets.
+`run_blocking`, and app bootstrap; `src/contract_tests.rs` checks the command
+list against `generate_handler!` and `api.ts`; `ui/src/api.ts` is the sole IPC
+wrapper; `ui/src/types.ts` mirrors the Rust serde shapes; `ui/src/stats-time.ts`
+computes the weekday/hour buckets.
 
 Android bridge: `apps/android/rust/src/{lib,types,convert}.rs` hold the uniffi
 surface, DTOs, and conversions; screens live in
@@ -78,9 +79,10 @@ it is not a second app-facing API.
    `FilmId::Tmdb`; the canonical key is `tt…` or `tmdb:<n>` via `FilmId::key()`,
    parsed with `FilmId::from_key()`. Tauri commands and the desktop UI cross the
    boundary using that key string; the uniffi DTO mirrors `FilmId` as an enum
-   (`Imdb { id }` / `Tmdb { id }`), and Kotlin converts with `filmIdFromKey` /
-   `filmKeyOf` in `MainScreen.kt`. Never use a raw TMDB id as the canonical key
-   when an IMDB id exists.
+   (`Imdb { id }` / `Tmdb { id }`), and the FFI crate exports
+   `film_id_from_key` / `film_key_of` (Kotlin `filmIdFromKey` / `filmKeyOf`) so
+   neither client parses or formats the key itself. Never use a raw TMDB id as
+   the canonical key when an IMDB id exists.
 6. Time: `watched_at` is stored in UTC. Constructors take device-local wall time
    (`DateTime<Local>`) and convert; `NewLogDetails.watched_at` is UTC;
    `timezone` stores the IANA zone the time was entered in. Display uses the log
@@ -113,8 +115,11 @@ it is not a second app-facing API.
     it, or commit it. Tests use wiremock and `TmdbClient::with_base_url`; only
     the live smoke hits `api.themoviedb.org`.
 11. The TMDB client is blocking `reqwest`, and SQLite calls are synchronous.
-    Desktop network work runs through `run_blocking`; Android calls use
-    `withContext(Dispatchers.IO)`. Never call these from a UI or main thread.
+    Every desktop command runs its work on Tauri's blocking pool through
+    `run_blocking` (`run_blocking_mut` for the `&mut` import); a non-`async`
+    command would run on the main thread and freeze the webview. Android calls
+    use `withContext(Dispatchers.IO)`. Never call these from a UI or main
+    thread.
 12. Wire contract: the Rust serde shapes are the source of truth.
     `ui/src/types.ts` mirrors them exactly (struct fields stay snake_case);
     `ui/src/api.ts` uses camelCase command argument names because Tauri maps
@@ -123,7 +128,12 @@ it is not a second app-facing API.
     renaming a field visible over IPC/FFI requires updating Rust, the TypeScript
     types/UI/tests, the FFI DTOs/conversions, Android usage/tests, and the
     regenerated bindings. Unit enum variants serialize as strings;
-    `Custom(String)` serializes as `{"custom": "..."}`.
+    `Custom(String)` serializes as `{"custom": "..."}`. `FilmListEntry.film` is
+    the slim `LibraryFilm` projection (the eight fields the Films tab and
+    collection cards render); `FilmMetadata` is the full metadata path used by
+    a film page. The FFI crate also owns the format-key mapping
+    (`format_parts` / `format_from_parts`) that the Android picker drives, so
+    Kotlin never hard-codes a catalog key.
 13. Generated Android bindings are build output, not source:
     `apps/android/app/src/main/kotlin/uniffi/` is gitignored and produced by the
     `generateKotlin` Gradle task (host debug cdylib plus the `bindgen` example),
@@ -195,6 +205,10 @@ Notes:
   app.
 - `npm ci` requires the committed `package-lock.json`; `npm run build` writes
   `ui/dist`, which Tauri embeds. CI builds the UI before the release-mode shell.
+- `apps/desktop/src-tauri/src/contract_tests.rs` parses `lib.rs` and
+  `ui/src/api.ts` and fails when a command is missing from
+  `generate_handler!` or `api.ts` (or vice versa). It requires every `api.ts`
+  wrapper to keep the one-line `invoke<T>("name", ...)` shape.
 - CI (`.github/workflows/ci.yml`) runs Rust tests/clippy/fmt on Windows, Linux,
   and macOS; a secret-gated live smoke on Ubuntu; the desktop UI checks; a
   release-mode desktop shell on all three platforms; and Android unit tests plus

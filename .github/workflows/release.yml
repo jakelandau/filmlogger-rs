@@ -98,6 +98,9 @@ jobs:
           prefix-key: v1-rust-android
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          build-root-directory: apps/android
       - name: Decode Android signing keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

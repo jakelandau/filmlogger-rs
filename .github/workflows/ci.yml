@@ -157,6 +157,11 @@ jobs:
           prefix-key: v1-rust-android
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
+      # Caches the Gradle distribution and resolved dependencies; without it
+      # every run re-downloads them (and one run already hit Maven's 429).
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          build-root-directory: apps/android
       - name: Assemble
         working-directory: apps/android
         run: |

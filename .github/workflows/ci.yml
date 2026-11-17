@@ -89,7 +89,8 @@ jobs:
       - name: Assemble
         working-directory: apps/android
         run: |
-          ./gradlew \
+          # gradlew is committed without the exec bit (added from Windows), so call it via bash.
+          bash ./gradlew \
             -Dorg.gradle.java.home="$JAVA_HOME" \
             testDebugUnitTest \
             assembleDebug \

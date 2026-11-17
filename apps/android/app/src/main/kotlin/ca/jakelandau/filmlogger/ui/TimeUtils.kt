@@ -13,6 +13,7 @@ import java.time.format.DateTimeFormatter
  */
 object TimeUtils {
     private val localFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    private val displayFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy, HH:mm")
 
     fun systemZone(): ZoneId = ZoneId.systemDefault()
 
@@ -51,9 +52,9 @@ object TimeUtils {
             null
         }
 
-    /** An instant rendered in `zone` as `yyyy-MM-dd HH:mm`. */
+    /** An instant rendered in `zone` as `Month d, yyyy, HH:mm`. */
     fun display(iso: String, zone: ZoneId = systemZone()): String =
-        parse(iso, zone)?.format(localFormatter) ?: iso
+        parse(iso, zone)?.format(displayFormatter) ?: iso
 
     /** The UTC calendar year of an instant, or null if it cannot be parsed. */
     fun year(iso: String): Int? =

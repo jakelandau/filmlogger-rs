@@ -153,12 +153,21 @@ export function formatDisplay(iso: string, timeZone?: string | null): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   try {
-    return d.toLocaleString(undefined, {
-      timeZone: timeZone ?? undefined,
-      dateStyle: "medium",
-      timeStyle: "short",
+    const zone = timeZone ?? undefined;
+    const date = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(d);
+    const time = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
       timeZoneName: "short",
-    });
+    }).format(d);
+    return `${date}, ${time}`;
   } catch {
     return d.toLocaleString();
   }

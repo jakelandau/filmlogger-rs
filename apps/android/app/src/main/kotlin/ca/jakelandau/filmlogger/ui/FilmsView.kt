@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,9 +53,15 @@ import uniffi.film_logger_ffi.LoggerException
 import uniffi.film_logger_ffi.MovieSummary
 import uniffi.film_logger_ffi.SearchPage
 
-private enum class FilmTab { ALL, SEEN, FAVORITES, BUCKET_LIST, COLLECTIONS }
+private enum class FilmTab { SEEN, BUCKET_LIST, COLLECTIONS }
 
-/** The film library: every stored film, filterable and searchable. */
+private val filmTabs = listOf(
+    FilmTab.SEEN to "Seen",
+    FilmTab.BUCKET_LIST to "Bucket List",
+    FilmTab.COLLECTIONS to "Collections",
+)
+
+/** The film library: seen films, the bucket list, and collection progress. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FilmsView(
@@ -64,7 +72,8 @@ fun FilmsView(
     onRefresh: () -> Unit,
     onError: (String) -> Unit,
 ) {
-    var tab by remember { mutableStateOf(FilmTab.ALL) }
+    var tab by remember { mutableStateOf(FilmTab.SEEN) }
+    var favoritesOnly by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
     var collections by remember { mutableStateOf<Map<Long, Collection>>(emptyMap()) }
     var loadingCollections by remember { mutableStateOf(false) }
@@ -72,6 +81,7 @@ fun FilmsView(
     var searchedQuery by remember { mutableStateOf("") }
     var searchBusy by remember { mutableStateOf(false) }
     var addingTmdb by remember { mutableStateOf<Long?>(null) }
+    var addingCollection by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
 
     val collectionIds = films.mapNotNull { it.film.collection?.id }.distinct()
@@ -90,6 +100,10 @@ fun FilmsView(
         } finally {
             loadingCollections = false
         }
+    }
+
+    val libraryByTmdb = remember(films) {
+        films.mapNotNull { entry -> entry.film.tmdbId?.let { it to entry } }.toMap()
     }
 
     fun searchTmdb(page: Int = 1) {
@@ -118,12 +132,18 @@ fun FilmsView(
         }
     }
 
-    fun addToBucketList(tmdbId: Long) {
-        if (addingTmdb != null) return
+    fun addToBucketList(tmdbId: Long, stored: FilmListEntry? = null) {
+        if (addingTmdb != null || addingCollection != null) return
         addingTmdb = tmdbId
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { logger.addToWatchlist(tmdbId) }
+                withContext(Dispatchers.IO) {
+                    if (stored != null) {
+                        logger.setWatchlisted(stored.film.filmId, true)
+                    } else {
+                        logger.addToWatchlist(tmdbId)
+                    }
+                }
                 onRefresh()
             } catch (e: LoggerException) {
                 onError(e.message ?: "bucket list update failed")
@@ -133,18 +153,51 @@ fun FilmsView(
         }
     }
 
+    // Add every part that is neither seen nor watchlisted; individual failures
+    // do not abort the run and are reported once at the end.
+    fun addMissingToBucketList(collection: Collection) {
+        if (addingTmdb != null || addingCollection != null) return
+        addingCollection = collection.id
+        val missing = missingParts(collection, libraryByTmdb)
+        scope.launch {
+            val failures = try {
+                withContext(Dispatchers.IO) {
+                    var failed = 0
+                    for (part in missing) {
+                        val stored = libraryByTmdb[part.tmdbId]
+                        try {
+                            if (stored != null) {
+                                logger.setWatchlisted(stored.film.filmId, true)
+                            } else {
+                                logger.addToWatchlist(part.tmdbId)
+                            }
+                        } catch (e: LoggerException) {
+                            failed += 1
+                        }
+                    }
+                    failed
+                }
+            } catch (e: LoggerException) {
+                onError(e.message ?: "bucket list update failed")
+                -1
+            } finally {
+                addingCollection = null
+            }
+            onRefresh()
+            if (failures > 0) {
+                onError("$failures of ${missing.size} films could not be added to the bucket list")
+            }
+        }
+    }
+
     val needle = search.trim().lowercase()
     val visible = films.filter { entry ->
-        val isListed = entry.viewings > 0u || entry.film.watchlisted
+        val seen = entry.viewings > 0u
         when (tab) {
-            FilmTab.ALL -> isListed
-            FilmTab.SEEN -> entry.viewings > 0u
-            FilmTab.FAVORITES -> entry.film.favorite && isListed
-            FilmTab.BUCKET_LIST -> entry.film.watchlisted && entry.viewings == 0u
+            FilmTab.SEEN -> seen && (!favoritesOnly || entry.film.favorite)
+            FilmTab.BUCKET_LIST -> entry.film.watchlisted && !seen
             FilmTab.COLLECTIONS -> true
-        } &&
-            (needle.isEmpty() ||
-                entry.film.title.lowercase().contains(needle))
+        } && (needle.isEmpty() || entry.film.title.lowercase().contains(needle))
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -158,7 +211,9 @@ fun FilmsView(
                     if (it.trim() != searchedQuery) tmdbResults = null
                 },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search films") },
+                label = {
+                    Text(if (tab == FilmTab.COLLECTIONS) "Search collections" else "Search films")
+                },
                 singleLine = true,
             )
             Spacer(Modifier.height(10.dp))
@@ -166,43 +221,34 @@ fun FilmsView(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilterChip(
-                    selected = tab == FilmTab.ALL,
-                    onClick = { tab = FilmTab.ALL },
-                    label = { Text("All") },
-                )
-                FilterChip(
-                    selected = tab == FilmTab.SEEN,
-                    onClick = { tab = FilmTab.SEEN },
-                    label = { Text("Seen") },
-                )
-                FilterChip(
-                    selected = tab == FilmTab.FAVORITES,
-                    onClick = { tab = FilmTab.FAVORITES },
-                    label = { Text("Favorites") },
-                )
-                FilterChip(
-                    selected = tab == FilmTab.BUCKET_LIST,
-                    onClick = { tab = FilmTab.BUCKET_LIST },
-                    label = { Text("Bucket List") },
-                )
-                FilterChip(
-                    selected = tab == FilmTab.COLLECTIONS,
-                    onClick = { tab = FilmTab.COLLECTIONS },
-                    label = { Text("Collections") },
-                )
+                for ((value, label) in filmTabs) {
+                    FilterChip(
+                        selected = tab == value,
+                        onClick = { tab = value },
+                        label = { Text(label) },
+                    )
+                }
+                if (tab == FilmTab.SEEN) {
+                    FilterChip(
+                        selected = favoritesOnly,
+                        onClick = { favoritesOnly = !favoritesOnly },
+                        label = { Text("Favorites") },
+                    )
+                }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Button(
-                    onClick = { searchTmdb(1) },
-                    enabled = search.isNotBlank() && !searchBusy,
+            if (tab != FilmTab.COLLECTIONS) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
                 ) {
-                    Icon(Icons.Filled.Search, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (searchBusy) "Searching…" else "Search TMDB")
+                    Button(
+                        onClick = { searchTmdb(1) },
+                        enabled = search.isNotBlank() && !searchBusy,
+                    ) {
+                        Icon(Icons.Filled.Search, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (searchBusy) "Searching…" else "Search TMDB")
+                    }
                 }
             }
         }
@@ -213,15 +259,16 @@ fun FilmsView(
                 collections = collections,
                 loading = loadingCollections,
                 search = needle,
+                libraryByTmdb = libraryByTmdb,
+                addingTmdb = addingTmdb,
+                addingCollection = addingCollection,
                 onOpen = onOpen,
                 onOpenTmdb = onOpenTmdb,
+                onAddPart = { tmdbId, stored -> addToBucketList(tmdbId, stored) },
+                onAddMissing = { addMissingToBucketList(it) },
             )
             return@Column
         }
-
-        val libraryByTmdb = films
-            .mapNotNull { entry -> entry.film.tmdbId?.let { it to entry } }
-            .toMap()
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -249,7 +296,7 @@ fun FilmsView(
                         result = result,
                         entry = libraryByTmdb[result.id],
                         adding = addingTmdb == result.id,
-                        onAdd = { addToBucketList(result.id) },
+                        onAdd = { addToBucketList(result.id, libraryByTmdb[result.id]) },
                         onOpen = { entry -> onOpen(entry) },
                     )
                 }
@@ -265,7 +312,10 @@ fun FilmsView(
                 }
                 if (visible.isNotEmpty()) {
                     item {
-                        Text("In your library", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            if (tab == FilmTab.SEEN) "Seen" else "Bucket List",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                     }
                 }
             }
@@ -282,8 +332,13 @@ fun FilmsView(
                         Text(
                             when {
                                 films.isEmpty() -> "No films yet"
-                                tmdbResults != null -> "No local matches"
-                                else -> "No matching films"
+                                tmdbResults != null -> "No local matches."
+                                needle.isNotEmpty() -> "No films match this filter."
+                                tab == FilmTab.SEEN && favoritesOnly -> "No favorite films seen."
+                                tab == FilmTab.SEEN -> "No films seen yet."
+                                else ->
+                                    "Your bucket list is empty. Add films from TMDB search " +
+                                        "or from a collection."
                             },
                             style = MaterialTheme.typography.titleMedium,
                         )
@@ -383,27 +438,46 @@ private fun TmdbResultRow(
     }
 }
 
+private fun seenCount(
+    collection: Collection,
+    libraryByTmdb: Map<Long, FilmListEntry>,
+): Int = collection.parts.count { part ->
+    libraryByTmdb[part.tmdbId]?.viewings?.let { it > 0u } == true
+}
+
+private fun isComplete(
+    collection: Collection,
+    libraryByTmdb: Map<Long, FilmListEntry>,
+): Boolean = collection.parts.isNotEmpty() &&
+    seenCount(collection, libraryByTmdb) == collection.parts.size
+
+private fun missingParts(
+    collection: Collection,
+    libraryByTmdb: Map<Long, FilmListEntry>,
+): List<CollectionPart> = collection.parts.filter { part ->
+    val entry = libraryByTmdb[part.tmdbId]
+    entry == null || (entry.viewings == 0u && !entry.film.watchlisted)
+}
+
 @Composable
 private fun CollectionsList(
     films: List<FilmListEntry>,
     collections: Map<Long, Collection>,
     loading: Boolean,
     search: String,
+    libraryByTmdb: Map<Long, FilmListEntry>,
+    addingTmdb: Long?,
+    addingCollection: Long?,
     onOpen: (FilmListEntry) -> Unit,
     onOpenTmdb: (Long) -> Unit,
+    onAddPart: (Long, FilmListEntry?) -> Unit,
+    onAddMissing: (Collection) -> Unit,
 ) {
-    val libraryByTmdb = remember(films) {
-        films.mapNotNull { entry ->
-            entry.film.tmdbId?.let { it to entry }
-        }.toMap()
-    }
-    val grouped = remember(films, collections) {
-        films
-            .mapNotNull { it.film.collection }
-            .distinctBy { it.id }
-            .mapNotNull { ref -> collections[ref.id]?.let { ref to it } }
-    }
-    val filtered = grouped.filter { (_, collection) ->
+    val grouped = films
+        .mapNotNull { it.film.collection }
+        .distinctBy { it.id }
+        .mapNotNull { ref -> collections[ref.id] }
+    val filtered = grouped.filter { collection ->
         search.isEmpty() ||
             collection.name.lowercase().contains(search) ||
             collection.parts.any { it.title.lowercase().contains(search) }
@@ -428,19 +502,58 @@ private fun CollectionsList(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("No matching collections", style = MaterialTheme.typography.titleMedium)
+            Text("No collections match this search.", style = MaterialTheme.typography.titleMedium)
         }
         return
     }
+
+    val completed = grouped.count { isComplete(it, libraryByTmdb) }
+    val ordered = filtered.sortedWith(
+        compareBy<Collection> { if (isComplete(it, libraryByTmdb)) 1 else 0 }
+            .thenBy { it.name.lowercase() },
+    )
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items(filtered) { (_, collection) ->
-            CollectionCard(collection, libraryByTmdb, onOpen, onOpenTmdb)
+        if (search.isEmpty()) {
+            item {
+                Text(
+                    "$completed of ${grouped.size} collections completed",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
+        items(ordered) { collection ->
+            CollectionCard(
+                collection = collection,
+                libraryByTmdb = libraryByTmdb,
+                addingTmdb = addingTmdb,
+                addingCollection = addingCollection,
+                onOpen = onOpen,
+                onOpenTmdb = onOpenTmdb,
+                onAddPart = onAddPart,
+                onAddMissing = onAddMissing,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompletedBadge() {
+    Surface(
+        color = MaterialTheme.colorScheme.primary,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Text(
+            "Completed",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
     }
 }
 
@@ -448,16 +561,22 @@ private fun CollectionsList(
 private fun CollectionCard(
     collection: Collection,
     libraryByTmdb: Map<Long, FilmListEntry>,
+    addingTmdb: Long?,
+    addingCollection: Long?,
     onOpen: (FilmListEntry) -> Unit,
     onOpenTmdb: (Long) -> Unit,
+    onAddPart: (Long, FilmListEntry?) -> Unit,
+    onAddMissing: (Collection) -> Unit,
 ) {
     val parts = collection.parts.sortedWith(
         compareBy<CollectionPart> { it.releaseYear ?: Int.MAX_VALUE }
             .thenBy { it.title.lowercase() },
     )
-    val seenCount = parts.count { part ->
-        libraryByTmdb[part.tmdbId]?.viewings?.let { it > 0u } == true
-    }
+    val total = parts.size
+    val seen = seenCount(collection, libraryByTmdb)
+    val complete = isComplete(collection, libraryByTmdb)
+    val missing = missingParts(collection, libraryByTmdb)
+    val busy = addingCollection != null || addingTmdb != null
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -487,15 +606,56 @@ private fun CollectionCard(
                 }
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(collection.name, style = MaterialTheme.typography.titleLarge)
-                    if (parts.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            collection.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (complete) {
+                            Spacer(Modifier.width(8.dp))
+                            CompletedBadge()
+                        }
+                    }
+                    if (total > 0) {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "$seenCount of ${parts.size} seen",
+                            "$seen of $total seen",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                }
+                if (total > 0) {
+                    Spacer(Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier.size(40.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            progress = { seen.toFloat() / total },
+                            modifier = Modifier.fillMaxSize(),
+                            strokeWidth = 4.dp,
+                            trackColor = MaterialTheme.colorScheme.surface,
+                        )
+                        Text(
+                            "${Math.round(seen * 100f / total)}%",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            if (missing.isNotEmpty()) {
+                TextButton(
+                    onClick = { onAddMissing(collection) },
+                    enabled = !busy,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text(
+                        if (addingCollection == collection.id) "Adding…"
+                        else "Add missing to Bucket List",
+                    )
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -508,7 +668,7 @@ private fun CollectionCard(
             }
             for (part in parts) {
                 val entry = libraryByTmdb[part.tmdbId]
-                val seen = entry?.viewings?.let { it > 0u } == true
+                val seenPart = entry?.viewings?.let { it > 0u } == true
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -523,9 +683,9 @@ private fun CollectionCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        if (seen) "✓" else "○",
+                        if (seenPart) "✓" else "○",
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (seen) {
+                        color = if (seenPart) {
                             MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
@@ -540,15 +700,26 @@ private fun CollectionCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Text(
-                        if (seen) "Seen" else "Not seen",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (seen) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
+                    when {
+                        seenPart -> Text(
+                            "Seen",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        entry?.film?.watchlisted == true -> Text(
+                            "On Bucket List",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        else -> TextButton(
+                            onClick = { onAddPart(part.tmdbId, entry) },
+                            enabled = !busy,
+                        ) {
+                            Text(
+                                if (addingTmdb == part.tmdbId) "Adding…" else "Bucket List",
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -600,14 +771,27 @@ private fun FilmRow(entry: FilmListEntry, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${entry.viewings.toInt()} viewing${if (entry.viewings == 1u) "" else "s"}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (film.favorite) {
-                        Spacer(Modifier.width(8.dp))
-                        Text("★ Favorite", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    if (entry.viewings == 0u) {
+                        Text(
+                            "On Bucket List",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Text(
+                            "${entry.viewings.toInt()} viewing" +
+                                if (entry.viewings == 1u) "" else "s",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (film.favorite) {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "★ Favorite",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
                 }
             }

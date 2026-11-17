@@ -4,17 +4,26 @@ import { el } from "../dom";
 import { api } from "../api";
 import { getState, go, reload, showError } from "../app";
 import { formatDisplay } from "../time";
+import {
+  collectionMissingParts,
+  collectionSeenCount,
+  filmLibraryByTmdb,
+  isCollectionComplete,
+  visibleLibraryFilms,
+} from "../film-sections";
 import type { Collection, FilmListEntry, MovieSummary, SearchPage } from "../types";
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w92";
 
-type Tab = "all" | "seen" | "favorites" | "bucket" | "collections";
-let tab: Tab = "all";
+type Tab = "seen" | "bucket" | "collections";
+let tab: Tab = "seen";
+let favoritesOnly = false;
 let search = "";
 let tmdbResults: SearchPage | null = null;
 let searchedQuery = "";
 let searchBusy = false;
 let addingTmdb: number | null = null;
+let addingCollection: number | null = null;
 const collectionCache = new Map<number, Collection>();
 const collectionLoading = new Set<number>();
 const collectionFailed = new Set<number>();
@@ -29,21 +38,9 @@ export function renderFilms(content: HTMLElement): void {
   }
 
   const needle = search.trim().toLowerCase();
-  const visible = films.filter((entry) => {
-    const isListed = entry.viewings > 0 || entry.film.watchlisted;
-    if (tab === "all" && !isListed) return false;
-    if (tab === "seen" && entry.viewings === 0) return false;
-    if (tab === "favorites" && (!entry.film.favorite || !isListed)) return false;
-    if (tab === "bucket" && (!entry.film.watchlisted || entry.viewings > 0)) return false;
-    if (needle === "") return true;
-    return entry.film.title.toLowerCase().includes(needle);
-  });
-
-  const libraryByTmdb = new Map(
-    films
-      .filter((entry) => entry.film.tmdb_id != null)
-      .map((entry) => [entry.film.tmdb_id as number, entry])
-  );
+  const visible = visibleLibraryFilms(films, tab, favoritesOnly, needle);
+  const sectionLabel = tab === "seen" ? "Seen" : "Bucket List";
+  const libraryByTmdb = filmLibraryByTmdb(films);
   const list = el("div", { class: "film-grid" });
 
   if (tmdbResults != null) {
@@ -67,24 +64,36 @@ export function renderFilms(content: HTMLElement): void {
         )
       );
     }
-    if (visible.length > 0) list.append(el("h3", {}, "In your library"));
+    if (visible.length > 0) list.append(el("h3", {}, sectionLabel));
   }
 
   if (visible.length > 0) {
     for (const entry of visible) list.append(renderRow(entry));
-  } else if (tmdbResults == null) {
+  } else if (films.length === 0) {
     list.append(
       el(
         "p",
         { class: "empty" },
-        films.length === 0 ? "No films yet. " : "No films match this filter. ",
-        films.length === 0
-          ? el("button", { class: "link", onclick: () => go("add") }, "Add your first film")
-          : ""
+        "No films yet. ",
+        el("button", { class: "link", onclick: () => go("add") }, "Add your first film")
       )
     );
-  } else {
+  } else if (tmdbResults != null) {
     list.append(el("p", { class: "empty" }, "No local matches."));
+  } else if (needle !== "") {
+    list.append(el("p", { class: "empty" }, "No films match this filter."));
+  } else if (tab === "seen" && favoritesOnly) {
+    list.append(el("p", { class: "empty" }, "No favorite films seen."));
+  } else if (tab === "seen") {
+    list.append(el("p", { class: "empty" }, "No films seen yet."));
+  } else {
+    list.append(
+      el(
+        "p",
+        { class: "empty" },
+        "Your bucket list is empty. Add films from TMDB search or from a collection."
+      )
+    );
   }
 
   content.append(list);
@@ -113,18 +122,50 @@ async function searchTmdb(page = 1): Promise<void> {
   }
 }
 
-async function addToBucketList(tmdbId: number): Promise<void> {
-  if (addingTmdb != null) return;
+async function addToBucketList(tmdbId: number, entry?: FilmListEntry): Promise<void> {
+  if (addingTmdb != null || addingCollection != null) return;
   addingTmdb = tmdbId;
   renderAgain();
   try {
-    await api.addToWatchlist(tmdbId);
+    if (entry != null) await api.setWatchlisted(entry.film.film_id, true);
+    else await api.addToWatchlist(tmdbId);
     await reload();
   } catch (e) {
     showError(e);
   } finally {
     addingTmdb = null;
     renderAgain();
+  }
+}
+
+// Add every part that is neither seen nor watchlisted. Individual failures
+// do not abort the run; the count is reported once at the end.
+async function addMissingToBucketList(collection: Collection): Promise<void> {
+  if (addingTmdb != null || addingCollection != null) return;
+  addingCollection = collection.id;
+  renderAgain();
+  const library = filmLibraryByTmdb(getState().films);
+  const missing = collectionMissingParts(collection, library);
+  let failures = 0;
+  try {
+    for (const part of missing) {
+      const entry = library.get(part.tmdb_id);
+      try {
+        if (entry != null) await api.setWatchlisted(entry.film.film_id, true);
+        else await api.addToWatchlist(part.tmdb_id);
+      } catch {
+        failures += 1;
+      }
+    }
+    await reload();
+  } catch (e) {
+    showError(e);
+  } finally {
+    addingCollection = null;
+    renderAgain();
+  }
+  if (failures > 0) {
+    showError(`${failures} of ${missing.length} films could not be added to the bucket list`);
   }
 }
 
@@ -166,7 +207,7 @@ function renderTmdbResult(result: MovieSummary, entry: FilmListEntry | undefined
             disabled: addingTmdb === result.id,
             onclick: (e: Event) => {
               e.stopPropagation();
-              void addToBucketList(result.id);
+              void addToBucketList(result.id, entry);
             },
           },
           addingTmdb === result.id ? "Adding…" : "Bucket List"
@@ -239,7 +280,18 @@ function renderCollections(content: HTMLElement, query: string): void {
   }
 
   const list = el("div", { class: "film-grid" });
-  for (const collection of visible) list.append(renderCollection(collection));
+  const library = filmLibraryByTmdb(getState().films);
+  if (needle === "") {
+    const completed = all.filter((collection) => isCollectionComplete(collection, library)).length;
+    content.append(el("p", { class: "dim" }, `${completed} of ${all.length} collections completed`));
+  }
+  for (const collection of [...visible].sort(
+    (a, b) =>
+      Number(isCollectionComplete(a, library)) - Number(isCollectionComplete(b, library)) ||
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  )) {
+    list.append(renderCollection(collection, library));
+  }
   content.append(list);
 }
 
@@ -253,18 +305,20 @@ async function openCollectionPart(tmdbId: number): Promise<void> {
   }
 }
 
-function renderCollection(collection: Collection): HTMLElement {
+function renderCollection(
+  collection: Collection,
+  library: Map<number, FilmListEntry>
+): HTMLElement {
   const parts = [...collection.parts].sort(
     (a, b) =>
       (a.release_year ?? Number.MAX_SAFE_INTEGER) -
         (b.release_year ?? Number.MAX_SAFE_INTEGER) || a.title.localeCompare(b.title)
   );
-  const library = new Map(
-    getState()
-      .films.filter((entry) => entry.film.tmdb_id != null)
-      .map((entry) => [entry.film.tmdb_id as number, entry])
-  );
-  const seenCount = parts.filter((part) => (library.get(part.tmdb_id)?.viewings ?? 0) > 0).length;
+  const seenCount = collectionSeenCount(collection, library);
+  const complete = isCollectionComplete(collection, library);
+  const missing = collectionMissingParts(collection, library);
+  const percent = parts.length > 0 ? Math.round((seenCount / parts.length) * 100) : 0;
+  const busy = addingTmdb != null || addingCollection != null;
   const posterPath = collection.poster_path ?? parts[0]?.poster_path ?? null;
   const poster = posterPath
     ? el("img", { class: "poster", src: IMAGE_BASE + posterPath, alt: "" })
@@ -277,6 +331,23 @@ function renderCollection(collection: Collection): HTMLElement {
   for (const part of parts) {
     const entry = library.get(part.tmdb_id);
     const seen = (entry?.viewings ?? 0) > 0;
+    const status = seen
+      ? el("span", { class: "collection-status seen" }, "Seen")
+      : entry?.film.watchlisted
+      ? el("span", { class: "collection-status bucket" }, "On Bucket List")
+      : el(
+          "button",
+          {
+            class: "btn",
+            type: "button",
+            disabled: busy,
+            onclick: (event: Event) => {
+              event.stopPropagation();
+              void addToBucketList(part.tmdb_id, entry);
+            },
+          },
+          addingTmdb === part.tmdb_id ? "Adding…" : "Bucket List"
+        );
     const row = el(
       "div",
       { class: "collection-part clickable" },
@@ -287,7 +358,7 @@ function renderCollection(collection: Collection): HTMLElement {
         part.title,
         part.release_year != null ? el("span", { class: "dim" }, ` (${part.release_year})`) : ""
       ),
-      el("span", { class: "collection-status" + (seen ? " seen" : "") }, seen ? "Seen" : "Not seen")
+      status
     );
     row.addEventListener("click", () => {
       if (entry != null) {
@@ -311,10 +382,41 @@ function renderCollection(collection: Collection): HTMLElement {
         { class: "collection-main" },
         el("div", { class: "collection-title" }, collection.name),
         parts.length > 0
-          ? el("div", { class: "dim" }, `${seenCount} of ${parts.length} seen`)
+          ? el(
+              "div",
+              { class: "dim" },
+              `${seenCount} of ${parts.length} seen`,
+              complete ? el("span", { class: "collection-badge" }, "Completed") : ""
+            )
           : ""
-      )
+      ),
+      parts.length > 0
+        ? el(
+            "div",
+            { class: "collection-ring", style: `--pct:${percent}` },
+            el("span", {}, `${percent}%`)
+          )
+        : ""
     ),
+    missing.length > 0
+      ? el(
+          "div",
+          { class: "collection-actions" },
+          el(
+            "button",
+            {
+              class: "btn",
+              type: "button",
+              disabled: busy,
+              onclick: (event: Event) => {
+                event.stopPropagation();
+                void addMissingToBucketList(collection);
+              },
+            },
+            addingCollection === collection.id ? "Adding…" : "Add missing to Bucket List"
+          )
+        )
+      : "",
     rows
   );
 }
@@ -329,9 +431,7 @@ function renderAgain(): void {
 
 function renderControls(): HTMLElement {
   const tabs: [Tab, string][] = [
-    ["all", "All"],
     ["seen", "Seen"],
-    ["favorites", "Favorites"],
     ["bucket", "Bucket List"],
     ["collections", "Collections"],
   ];
@@ -351,31 +451,55 @@ function renderControls(): HTMLElement {
       )
     );
   }
+  if (tab === "seen") {
+    chips.append(
+      el(
+        "button",
+        {
+          class: favoritesOnly ? "chip active" : "chip",
+          onclick: () => {
+            favoritesOnly = !favoritesOnly;
+            renderAgain();
+          },
+        },
+        "Favorites"
+      )
+    );
+  }
   chips.append(
     el("input", {
       class: "search",
       type: "text",
-      placeholder: "Search title…",
+      placeholder: tab === "collections" ? "Search collections…" : "Search films…",
       value: search,
       oninput: (e: Event) => {
         search = (e.currentTarget as HTMLInputElement).value;
         if (search.trim() !== searchedQuery) tmdbResults = null;
         renderAgain();
+        // The list re-render replaces the field, so typing would stop after one
+        // character unless focus and the caret are restored.
+        const field = document.querySelector<HTMLInputElement>(".search");
+        if (field) {
+          field.focus();
+          field.setSelectionRange(field.value.length, field.value.length);
+        }
       },
     })
   );
-  chips.append(
-    el(
-      "button",
-      {
-        class: "btn primary",
-        type: "button",
-        disabled: searchBusy || search.trim() === "",
-        onclick: () => void searchTmdb(1),
-      },
-      searchBusy ? "Searching…" : "Search TMDB"
-    )
-  );
+  if (tab !== "collections") {
+    chips.append(
+      el(
+        "button",
+        {
+          class: "btn primary",
+          type: "button",
+          disabled: searchBusy || search.trim() === "",
+          onclick: () => void searchTmdb(1),
+        },
+        searchBusy ? "Searching…" : "Search TMDB"
+      )
+    );
+  }
   return chips;
 }
 
@@ -402,7 +526,9 @@ function renderRow(entry: FilmListEntry): HTMLElement {
       el(
         "div",
         { class: "log-sub" },
-        el("span", { class: "dim" }, `${entry.viewings} viewing${entry.viewings === 1 ? "" : "s"}`),
+        entry.viewings === 0
+          ? el("span", { class: "bucket-status" }, "On Bucket List")
+          : el("span", { class: "dim" }, `${entry.viewings} viewing${entry.viewings === 1 ? "" : "s"}`),
         entry.last_watched_at
           ? el("span", { class: "dim" }, " · last " + formatDisplay(entry.last_watched_at))
           : ""

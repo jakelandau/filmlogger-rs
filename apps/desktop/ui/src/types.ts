@@ -32,7 +32,7 @@ export type Format =
         dbox: boolean;
       };
     }
-  | { home: { medium: HomeMedium } };
+  | { home: { medium: HomeMedium; three_d: boolean; hfr: boolean } };
 
 export type Certifications = Record<string, string>;
 
@@ -234,6 +234,12 @@ export interface FormatLegality {
   forced_flags: string[];
 }
 
+export interface HomeFormatLegality {
+  medium: string;
+  allowed_flags: string[];
+  forced_flags: string[];
+}
+
 export interface FormatCatalog {
   families: FormatOption[];
   technologies: Record<string, FormatOption[]>;
@@ -241,4 +247,5 @@ export interface FormatCatalog {
   mediums: FormatOption[];
   flag_labels: FormatOption[];
   legal: FormatLegality[];
+  home_legal: HomeFormatLegality[];
 }

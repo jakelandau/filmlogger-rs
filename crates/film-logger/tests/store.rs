@@ -12,6 +12,8 @@ fn test_log(film_id: FilmId, title: &str, venue: Venue) -> WatchLog {
     let format = if venue == Venue::Home {
         Format::Home {
             medium: HomeMedium::BluRay,
+            three_d: false,
+            hfr: false,
         }
     } else {
         Format::Theatre {

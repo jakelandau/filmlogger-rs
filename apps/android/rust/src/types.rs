@@ -63,6 +63,10 @@ pub enum Format {
     Home {
         /// The release medium.
         medium: HomeMedium,
+        /// Presented in 3D.
+        three_d: bool,
+        /// Presented at high frame rate.
+        hfr: bool,
     },
 }
 
@@ -150,6 +154,8 @@ pub enum HomeMedium {
     HdDvd,
     /// Blu-ray.
     BluRay,
+    /// 3D Blu-ray.
+    BluRay3D,
     /// 4K Ultra HD Blu-ray.
     UhdBluRay,
     /// `LaserDisc`.
@@ -581,6 +587,17 @@ pub struct FormatLegality {
     pub forced_flags: Vec<String>,
 }
 
+/// Flag rules for one home release medium.
+#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
+pub struct HomeFormatLegality {
+    /// The release-medium key.
+    pub medium: String,
+    /// The flags this medium may carry.
+    pub allowed_flags: Vec<String>,
+    /// The flags this medium must carry.
+    pub forced_flags: Vec<String>,
+}
+
 /// The viewing-format catalog both apps render.
 #[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
 pub struct FormatCatalog {
@@ -596,6 +613,8 @@ pub struct FormatCatalog {
     pub flag_labels: Vec<FormatOption>,
     /// Every legal projection × technology × auditorium combination.
     pub legal: Vec<FormatLegality>,
+    /// Flag rules for each home release medium.
+    pub home_legal: Vec<HomeFormatLegality>,
 }
 
 /// An error from the logger.

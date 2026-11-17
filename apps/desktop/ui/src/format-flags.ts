@@ -27,7 +27,13 @@ const FLAG_ICONS: Record<FormatFlag["key"], IconPath[]> = {
 
 /** Theatre presentation flags, including 4DX-style motion seating. */
 export function formatFlags(format: Format | null): FormatFlag[] {
-  if (format == null || !("theatre" in format)) return [];
+  if (format == null) return [];
+  if ("home" in format) {
+    const flags: FormatFlag[] = [];
+    if (format.home.three_d) flags.push({ key: "3d", label: "3D" });
+    if (format.home.hfr) flags.push({ key: "hfr", label: "HFR" });
+    return flags;
+  }
   const theatre = format.theatre;
   const screen = theatre.screen;
   const motionScreen = screen === "4dx" || screen === "ultra_4dx";

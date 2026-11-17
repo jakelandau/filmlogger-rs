@@ -11,7 +11,9 @@ pub mod service;
 pub mod store;
 pub mod tmdb;
 
-pub use catalog::{FormatCatalog, FormatLegality, FormatOption, format_catalog};
+pub use catalog::{
+    FormatCatalog, FormatLegality, FormatOption, HomeFormatLegality, format_catalog,
+};
 pub use domain::{
     CastMember, Certifications, Collection, CollectionPart, CollectionRef, Dci, Film, FilmId,
     FilmListEntry, FilmMetadata, FilmPage, FilmStats, Flag, Format, Genre, HomeMedium, Imax,

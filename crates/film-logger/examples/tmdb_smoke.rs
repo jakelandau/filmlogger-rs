@@ -45,6 +45,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Venue::Home,
         Format::Home {
             medium: HomeMedium::BluRay,
+            three_d: false,
+            hfr: false,
         },
     )?;
     let store = Store::open("tmdb_smoke.db")?;

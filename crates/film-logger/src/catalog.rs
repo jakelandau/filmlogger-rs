@@ -45,6 +45,17 @@ pub struct FormatLegality {
     pub forced_flags: Vec<String>,
 }
 
+/// Flag rules for one home release medium.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HomeFormatLegality {
+    /// The release-medium key.
+    pub medium: String,
+    /// The flags this medium may carry.
+    pub allowed_flags: Vec<String>,
+    /// The flags this medium must carry.
+    pub forced_flags: Vec<String>,
+}
+
 /// The whole format catalog.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FormatCatalog {
@@ -60,6 +71,8 @@ pub struct FormatCatalog {
     pub flag_labels: Vec<FormatOption>,
     /// Every legal projection × technology × auditorium combination.
     pub legal: Vec<FormatLegality>,
+    /// Flag rules for each home release medium.
+    pub home_legal: Vec<HomeFormatLegality>,
 }
 
 /// The format keys of the presentation flags, in display order.
@@ -135,6 +148,7 @@ impl HomeMedium {
             HomeMedium::Dvd => "dvd",
             HomeMedium::HdDvd => "hd_dvd",
             HomeMedium::BluRay => "bluray",
+            HomeMedium::BluRay3D => "bluray_3d",
             HomeMedium::UhdBluRay => "uhd_bluray",
             HomeMedium::LaserDisc => "laserdisc",
             HomeMedium::Streaming => "streaming",
@@ -312,23 +326,63 @@ pub fn format_catalog() -> FormatCatalog {
             .collect(),
         technologies: technologies_map,
         screens: screens_map,
-        mediums: vec![
-            FormatOption::new("dvd", "DVD"),
-            FormatOption::new("hd_dvd", "HD DVD"),
-            FormatOption::new("bluray", "Blu-ray"),
-            FormatOption::new("uhd_bluray", "4K Ultra HD Blu-ray"),
-            FormatOption::new("laserdisc", "LaserDisc"),
-            FormatOption::new("streaming", "Streaming"),
-            FormatOption::new("broadcast", "Broadcast"),
-            FormatOption::new("telecine", "Telecine"),
-        ],
+        mediums: home_mediums()
+            .iter()
+            .map(|medium| FormatOption::new(medium.key(), &medium_label(medium)))
+            .collect(),
         flag_labels: vec![
             FormatOption::new("three_d", "3D"),
             FormatOption::new("hfr", "HFR"),
             FormatOption::new("dbox", "D-BOX"),
         ],
         legal,
+        home_legal: home_legal(),
     }
+}
+
+/// The built-in home release mediums, in display order.
+fn home_mediums() -> [HomeMedium; 9] {
+    [
+        HomeMedium::Dvd,
+        HomeMedium::HdDvd,
+        HomeMedium::BluRay,
+        HomeMedium::BluRay3D,
+        HomeMedium::UhdBluRay,
+        HomeMedium::LaserDisc,
+        HomeMedium::Streaming,
+        HomeMedium::Broadcast,
+        HomeMedium::Telecine,
+    ]
+}
+
+/// The flag rules for every built-in home medium.
+fn home_legal() -> Vec<HomeFormatLegality> {
+    home_mediums()
+        .iter()
+        .map(|medium| {
+            let (allowed_flags, forced_flags) = FLAG_KEYS
+                .iter()
+                .filter(|(_, flag)| medium.allows_flag(*flag))
+                .map(|(key, flag)| {
+                    (
+                        (*key).to_owned(),
+                        medium.forces_flag(*flag).then(|| (*key).to_owned()),
+                    )
+                })
+                .fold((Vec::new(), Vec::new()), |mut acc, (key, forced)| {
+                    acc.0.push(key.clone());
+                    if let Some(forced) = forced {
+                        acc.1.push(forced);
+                    }
+                    acc
+                });
+            HomeFormatLegality {
+                medium: medium.key().to_owned(),
+                allowed_flags,
+                forced_flags,
+            }
+        })
+        .collect()
 }
 
 /// The display label of a technology.
@@ -379,6 +433,7 @@ fn medium_label(medium: &HomeMedium) -> String {
         HomeMedium::Dvd => "DVD",
         HomeMedium::HdDvd => "HD DVD",
         HomeMedium::BluRay => "Blu-ray",
+        HomeMedium::BluRay3D => "3D Blu-ray",
         HomeMedium::UhdBluRay => "4K Ultra HD Blu-ray",
         HomeMedium::LaserDisc => "LaserDisc",
         HomeMedium::Streaming => "Streaming",
@@ -399,7 +454,7 @@ impl Format {
             Format::Theatre {
                 projection, screen, ..
             } => [tech_label(projection), screen_label(screen)].join(" · "),
-            Format::Home { medium } => medium_label(medium),
+            Format::Home { medium, .. } => medium_label(medium),
         }
     }
 }
@@ -568,7 +623,9 @@ mod tests {
     fn summary_matches_labels() {
         assert_eq!(
             Format::Home {
-                medium: HomeMedium::BluRay
+                medium: HomeMedium::BluRay,
+                three_d: false,
+                hfr: false,
             }
             .summary(),
             "Blu-ray"
@@ -583,11 +640,71 @@ mod tests {
         );
         assert_eq!(
             Format::Home {
-                medium: HomeMedium::Custom("VHS".into())
+                medium: HomeMedium::Custom("VHS".into()),
+                three_d: false,
+                hfr: false,
             }
             .summary(),
             "VHS"
         );
+    }
+
+    #[test]
+    fn home_flag_rules_are_catalogued_and_validated() {
+        let catalog = format_catalog();
+        let by_medium = |key: &str| {
+            catalog
+                .home_legal
+                .iter()
+                .find(|row| row.medium == key)
+                .unwrap()
+        };
+        assert_eq!(by_medium("bluray_3d").allowed_flags, ["three_d"]);
+        assert_eq!(by_medium("bluray_3d").forced_flags, ["three_d"]);
+        assert_eq!(by_medium("uhd_bluray").allowed_flags, ["hfr"]);
+        assert_eq!(by_medium("uhd_bluray").forced_flags, Vec::<String>::new());
+        assert_eq!(by_medium("bluray").allowed_flags, Vec::<String>::new());
+
+        let three_d = Format::Home {
+            medium: HomeMedium::BluRay3D,
+            three_d: true,
+            hfr: false,
+        };
+        assert!(three_d.validate().is_ok());
+        assert_eq!(three_d.summary(), "3D Blu-ray");
+
+        let missing_three_d = Format::Home {
+            medium: HomeMedium::BluRay3D,
+            three_d: false,
+            hfr: false,
+        };
+        assert!(matches!(
+            missing_three_d.validate(),
+            Err(Error::HomeFlagMismatch {
+                flag: Flag::ThreeD,
+                ..
+            })
+        ));
+
+        let uhd_hfr = Format::Home {
+            medium: HomeMedium::UhdBluRay,
+            three_d: false,
+            hfr: true,
+        };
+        assert!(uhd_hfr.validate().is_ok());
+
+        let bluray_hfr = Format::Home {
+            medium: HomeMedium::BluRay,
+            three_d: false,
+            hfr: true,
+        };
+        assert!(matches!(
+            bluray_hfr.validate(),
+            Err(Error::HomeFlagMismatch {
+                flag: Flag::Hfr,
+                ..
+            })
+        ));
     }
 
     #[test]

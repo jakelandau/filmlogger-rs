@@ -5,9 +5,9 @@ use chrono::{DateTime, Utc};
 use crate::types::{
     CastMember, Certification, Certifications, Collection, CollectionPart, CollectionRef,
     CountEntry, Dci, Film, FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, FilmViewings,
-    Format, FormatCatalog, FormatGroup, FormatLegality, FormatOption, Genre, HomeMedium, Imax,
-    LoggerError, Movie, MovieSummary, NewLogDetails, Projection, Rating, RatingBoard, ScreenClass,
-    SearchPage, Settings, Stats, Venue, VenueCounts, WatchLog, YearCount,
+    Format, FormatCatalog, FormatGroup, FormatLegality, FormatOption, Genre, HomeFormatLegality,
+    HomeMedium, Imax, LoggerError, Movie, MovieSummary, NewLogDetails, Projection, Rating,
+    RatingBoard, ScreenClass, SearchPage, Settings, Stats, Venue, VenueCounts, WatchLog, YearCount,
 };
 use film_logger as core;
 
@@ -203,6 +203,7 @@ impl From<HomeMedium> for core::HomeMedium {
             HomeMedium::Dvd => core::HomeMedium::Dvd,
             HomeMedium::HdDvd => core::HomeMedium::HdDvd,
             HomeMedium::BluRay => core::HomeMedium::BluRay,
+            HomeMedium::BluRay3D => core::HomeMedium::BluRay3D,
             HomeMedium::UhdBluRay => core::HomeMedium::UhdBluRay,
             HomeMedium::LaserDisc => core::HomeMedium::LaserDisc,
             HomeMedium::Streaming => core::HomeMedium::Streaming,
@@ -219,6 +220,7 @@ impl From<core::HomeMedium> for HomeMedium {
             core::HomeMedium::Dvd => HomeMedium::Dvd,
             core::HomeMedium::HdDvd => HomeMedium::HdDvd,
             core::HomeMedium::BluRay => HomeMedium::BluRay,
+            core::HomeMedium::BluRay3D => HomeMedium::BluRay3D,
             core::HomeMedium::UhdBluRay => HomeMedium::UhdBluRay,
             core::HomeMedium::LaserDisc => HomeMedium::LaserDisc,
             core::HomeMedium::Streaming => HomeMedium::Streaming,
@@ -271,8 +273,14 @@ impl From<Format> for core::Format {
                 hfr,
                 dbox,
             },
-            Format::Home { medium } => core::Format::Home {
+            Format::Home {
+                medium,
+                three_d,
+                hfr,
+            } => core::Format::Home {
                 medium: medium.into(),
+                three_d,
+                hfr,
             },
         }
     }
@@ -294,8 +302,14 @@ impl From<core::Format> for Format {
                 hfr,
                 dbox,
             },
-            core::Format::Home { medium } => Format::Home {
+            core::Format::Home {
+                medium,
+                three_d,
+                hfr,
+            } => Format::Home {
                 medium: medium.into(),
+                three_d,
+                hfr,
             },
             _ => unreachable!(),
         }
@@ -664,6 +678,16 @@ impl From<core::FormatOption> for FormatOption {
     }
 }
 
+impl From<core::HomeFormatLegality> for HomeFormatLegality {
+    fn from(l: core::HomeFormatLegality) -> Self {
+        Self {
+            medium: l.medium,
+            allowed_flags: l.allowed_flags,
+            forced_flags: l.forced_flags,
+        }
+    }
+}
+
 impl From<core::FormatLegality> for FormatLegality {
     fn from(l: core::FormatLegality) -> Self {
         Self {
@@ -698,6 +722,7 @@ impl From<core::FormatCatalog> for FormatCatalog {
             mediums: c.mediums.into_iter().map(Into::into).collect(),
             flag_labels: c.flag_labels.into_iter().map(Into::into).collect(),
             legal: c.legal.into_iter().map(Into::into).collect(),
+            home_legal: c.home_legal.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -776,6 +801,9 @@ impl From<core::Error> for LoggerError {
                 detail: format!(
                     "flag {flag:?} does not match projection {projection:?} in screen {screen:?}"
                 ),
+            },
+            core::Error::HomeFlagMismatch { medium, flag } => LoggerError::FlagMismatch {
+                detail: format!("flag {flag:?} does not match home medium {medium:?}"),
             },
             core::Error::InvalidWatchCount { count } => LoggerError::InvalidWatchCount { count },
             core::Error::InvalidImport { detail } => LoggerError::InvalidImport { detail },

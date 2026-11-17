@@ -113,6 +113,12 @@ pub enum Format {
     Home {
         /// The release medium.
         medium: HomeMedium,
+        /// Presented in 3D.
+        #[serde(default)]
+        three_d: bool,
+        /// Presented at high frame rate.
+        #[serde(default)]
+        hfr: bool,
     },
 }
 
@@ -134,14 +140,41 @@ impl Format {
     ///
     /// [`Format::Theatre`] checks that the projection runs in the screen and
     /// that every flag is allowed (and, where the screen forces one, on) for
-    /// both the projection and the screen. [`Format::Home`] is always valid.
+    /// both the projection and the screen. [`Format::Home`] checks the
+    /// medium-specific flag rules (3D Blu-ray forces 3D; UHD Blu-ray allows
+    /// optional HFR; other media carry neither).
     ///
     /// # Errors
     ///
     /// Returns [`Error::ProjectionScreenMismatch`] if the projection does not
-    /// run in the screen, or [`Error::FlagMismatch`] if a flag is incompatible.
-    #[must_use = "a theatre format must be validated before use"]
+    /// run in the screen, [`Error::FlagMismatch`] if a theatre flag is
+    /// incompatible, or [`Error::HomeFlagMismatch`] if a home flag is
+    /// incompatible.
+    #[must_use = "a viewing format must be validated before use"]
     pub fn validate(&self) -> Result<(), Error> {
+        if let Format::Home {
+            medium,
+            three_d,
+            hfr,
+        } = self
+        {
+            for (flag, on) in [(Flag::ThreeD, *three_d), (Flag::Hfr, *hfr)] {
+                let allowed = medium.allows_flag(flag);
+                let forced = medium.forces_flag(flag);
+                let ok = if forced {
+                    on && allowed
+                } else {
+                    !on || allowed
+                };
+                if !ok {
+                    return Err(Error::HomeFlagMismatch {
+                        medium: medium.clone(),
+                        flag,
+                    });
+                }
+            }
+            return Ok(());
+        }
         let Format::Theatre {
             projection,
             screen,
@@ -150,7 +183,7 @@ impl Format {
             dbox,
         } = self
         else {
-            return Ok(());
+            unreachable!()
         };
         if !projection.runs_on(screen) {
             return Err(Error::ProjectionScreenMismatch {
@@ -311,6 +344,24 @@ pub enum Flag {
     Dbox,
 }
 
+impl HomeMedium {
+    /// Whether this medium can carry the given presentation flag.
+    #[must_use]
+    pub fn allows_flag(&self, flag: Flag) -> bool {
+        match self {
+            HomeMedium::BluRay3D => matches!(flag, Flag::ThreeD),
+            HomeMedium::UhdBluRay => matches!(flag, Flag::Hfr),
+            _ => false,
+        }
+    }
+
+    /// Whether this medium always carries the given presentation flag.
+    #[must_use]
+    pub fn forces_flag(&self, flag: Flag) -> bool {
+        matches!((self, flag), (HomeMedium::BluRay3D, Flag::ThreeD))
+    }
+}
+
 impl Projection {
     /// Whether this projection can present the given presentation flag.
     #[must_use]
@@ -386,6 +437,9 @@ pub enum HomeMedium {
     /// Blu-ray.
     #[serde(rename = "bluray")]
     BluRay,
+    /// 3D Blu-ray.
+    #[serde(rename = "bluray_3d")]
+    BluRay3D,
     /// 4K Ultra HD Blu-ray.
     #[serde(rename = "uhd_bluray")]
     UhdBluRay,
@@ -1258,10 +1312,12 @@ mod tests {
 
         let h = Format::Home {
             medium: HomeMedium::Custom("d-box".into()),
+            three_d: false,
+            hfr: false,
         };
         assert_eq!(
             serde_json::to_string(&h).unwrap(),
-            r#"{"home":{"medium":{"custom":"d-box"}}}"#
+            r#"{"home":{"medium":{"custom":"d-box"},"three_d":false,"hfr":false}}"#
         );
 
         assert_eq!(dci.venue(), Venue::Theatre);
@@ -1305,6 +1361,8 @@ mod tests {
         // validation too.
         ok.format = Some(Format::Home {
             medium: HomeMedium::BluRay,
+            three_d: false,
+            hfr: false,
         });
         assert!(matches!(
             ok.validate(),
@@ -1422,6 +1480,8 @@ mod tests {
 
         let home = Format::Home {
             medium: HomeMedium::BluRay,
+            three_d: false,
+            hfr: false,
         };
         assert!(home.validate().is_ok());
     }

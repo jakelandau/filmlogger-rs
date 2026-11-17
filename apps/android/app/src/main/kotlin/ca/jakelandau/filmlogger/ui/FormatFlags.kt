@@ -28,14 +28,21 @@ enum class FormatFlag(val label: String, val iconRes: Int) {
     MOTION("Motion", R.drawable.ic_flag_motion),
 }
 
-/** Presentation flags for a theatre viewing; home viewings have none. */
-fun formatFlags(format: Format?): List<FormatFlag> {
-    if (format !is Format.Theatre) return emptyList()
-    val motionScreen = format.screen is ScreenClass.FourDx || format.screen is ScreenClass.Ultra4Dx
-    return buildList {
-        if (format.threeD || motionScreen) add(FormatFlag.THREE_D)
+/** Presentation flags for a theatre or home viewing. */
+fun formatFlags(format: Format?): List<FormatFlag> = when (format) {
+    null -> emptyList()
+    is Format.Home -> buildList {
+        if (format.threeD) add(FormatFlag.THREE_D)
         if (format.hfr) add(FormatFlag.HFR)
-        if (format.dbox || motionScreen) add(FormatFlag.MOTION)
+    }
+    is Format.Theatre -> {
+        val motionScreen =
+            format.screen is ScreenClass.FourDx || format.screen is ScreenClass.Ultra4Dx
+        buildList {
+            if (format.threeD || motionScreen) add(FormatFlag.THREE_D)
+            if (format.hfr) add(FormatFlag.HFR)
+            if (format.dbox || motionScreen) add(FormatFlag.MOTION)
+        }
     }
 }
 

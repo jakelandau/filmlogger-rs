@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use crate::domain::{FilmId, Flag, Format, Projection, ScreenClass, Venue};
+use crate::domain::{FilmId, Flag, Format, HomeMedium, Projection, ScreenClass, Venue};
 
 /// Crate-wide error.
 #[derive(Error, Debug)]
@@ -88,6 +88,15 @@ pub enum Error {
         projection: Projection,
         /// The auditorium class.
         screen: ScreenClass,
+    },
+
+    /// A home format's presentation flag is incompatible with its medium.
+    #[error("flag {flag:?} does not match home medium {medium:?}")]
+    HomeFlagMismatch {
+        /// The presentation flag.
+        flag: Flag,
+        /// The release medium.
+        medium: HomeMedium,
     },
 
     /// A watch log's `watch_count` is below one.

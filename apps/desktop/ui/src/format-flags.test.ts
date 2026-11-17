@@ -28,7 +28,9 @@ describe("formatFlags", () => {
     expect(labels(theatre("ultra_4dx"))).toEqual(["3D", "Motion"]);
   });
 
-  it("does not report flags for home viewings", () => {
-    expect(labels({ home: { medium: "bluray" } })).toEqual([]);
+  it("reports explicit home presentation flags", () => {
+    expect(labels({ home: { medium: "bluray_3d", three_d: true, hfr: false } })).toEqual(["3D"]);
+    expect(labels({ home: { medium: "uhd_bluray", three_d: false, hfr: true } })).toEqual(["HFR"]);
+    expect(labels({ home: { medium: "bluray", three_d: false, hfr: false } })).toEqual([]);
   });
 });

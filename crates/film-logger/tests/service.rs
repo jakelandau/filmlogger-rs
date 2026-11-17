@@ -59,6 +59,8 @@ fn theatre_format() -> Format {
 fn bluray() -> Format {
     Format::Home {
         medium: HomeMedium::BluRay,
+        three_d: false,
+        hfr: false,
     }
 }
 

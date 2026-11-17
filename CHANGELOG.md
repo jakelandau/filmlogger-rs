@@ -35,6 +35,8 @@ example `## [0.1.0] - 2026-11-15`.
   `latest.json`; Android downloads the release APK and opens the installer.
 - Signing and release documentation, including the required Actions secrets.
 - Third-party license inventory in `THIRD_PARTY.md`.
+- Home-format presentation flags: 3D Blu-ray is labelled and forced to 3D;
+  4K Ultra HD Blu-ray can optionally record HFR.
 - Settings licenses/credits section and TMDB attribution.
 - Film-strip icon for the Films navigation item.
 - `CHANGELOG.md` for release-to-release change tracking.

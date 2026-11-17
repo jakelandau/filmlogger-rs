@@ -29,7 +29,7 @@ function optionsOf(list: FormatOption[]): Options {
 /** A venue-appropriate default format. */
 export function defaultFormat(venue: Venue): Format {
   if (venue === "home") {
-    return { home: { medium: "bluray" } };
+    return { home: { medium: "bluray", three_d: false, hfr: false } };
   }
   return {
     theatre: {
@@ -240,6 +240,44 @@ function buildHome(active: FormatCatalog, initial: Format | null): FormatControl
     h ? parseLeaf(h.medium) : { value: "bluray", custom: "" },
     true
   );
+  const flags: Record<string, boolean> = {
+    three_d: h?.three_d ?? false,
+    hfr: h?.hfr ?? false,
+  };
+  const flagHolder = el("div", { class: "flag-row" });
+
+  function renderFlags(): void {
+    const entry = active.home_legal.find((row) => row.medium === medium.select.value);
+    clear(flagHolder);
+    if (!entry) {
+      flagHolder.append(el("span", { class: "dim" }, "no presentation options"));
+      return;
+    }
+    let any = false;
+    for (const flag of active.flag_labels) {
+      if (!entry.allowed_flags.includes(flag.key)) {
+        flags[flag.key] = false;
+        continue;
+      }
+      any = true;
+      const forced = entry.forced_flags.includes(flag.key);
+      if (forced) flags[flag.key] = true;
+      const cb = el("input", {
+        type: "checkbox",
+        checked: forced ? true : flags[flag.key],
+        disabled: forced,
+      });
+      cb.addEventListener("change", () => {
+        flags[flag.key] = cb.checked;
+      });
+      flagHolder.append(el("label", { class: "flag" }, cb, " " + flag.label));
+    }
+    if (!any) flagHolder.append(el("span", { class: "dim" }, "no presentation options"));
+  }
+
+  medium.select.addEventListener("change", renderFlags);
+  renderFlags();
+
   const root = el(
     "div",
     { class: "format-home" },
@@ -249,7 +287,22 @@ function buildHome(active: FormatCatalog, initial: Format | null): FormatControl
       el("label", {}, "Release medium"),
       medium.select,
       medium.input
+    ),
+    el(
+      "div",
+      { class: "field-row" },
+      el("label", {}, "Presentation"),
+      flagHolder
     )
   );
-  return { root, get: () => ({ home: { medium: medium.leaf() } }) };
+  return {
+    root,
+    get: () => ({
+      home: {
+        medium: medium.leaf(),
+        three_d: flags["three_d"] ?? false,
+        hfr: flags["hfr"] ?? false,
+      },
+    }),
+  };
 }

@@ -370,9 +370,18 @@ impl Store {
                         }
                     }
                 }
-                Some(Format::Home { medium }) => {
+                Some(Format::Home {
+                    medium,
+                    three_d,
+                    hfr,
+                }) => {
                     *by_family.entry("home".to_string()).or_default() += 1;
                     *by_medium.entry(medium.key().to_string()).or_default() += 1;
+                    for (key, on) in [("three_d", *three_d), ("hfr", *hfr)] {
+                        if on {
+                            *by_flag.entry(key.to_string()).or_default() += 1;
+                        }
+                    }
                 }
                 None => {}
             }
@@ -1070,6 +1079,8 @@ mod tests {
         let format = if venue == Venue::Home {
             Format::Home {
                 medium: HomeMedium::BluRay,
+                three_d: false,
+                hfr: false,
             }
         } else {
             Format::Theatre {

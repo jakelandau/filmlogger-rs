@@ -51,23 +51,33 @@ private fun legalityOf(catalog: FormatCatalog, parts: FormatParts): FormatLegali
 
 /** Clamp the presentation flags to those the selected combination allows. */
 private fun normalizeFlags(parts: FormatParts, catalog: FormatCatalog): FormatParts {
-    val entry = legalityOf(catalog, parts) ?: return parts.copy(threeD = false, hfr = false, dbox = false)
+    val allowedFlags: List<String>
+    val forcedFlags: List<String>
+    if (parts.venue == Venue.HOME) {
+        val entry = catalog.homeLegal.firstOrNull { it.medium == parts.medium }
+        allowedFlags = entry?.allowedFlags ?: emptyList()
+        forcedFlags = entry?.forcedFlags ?: emptyList()
+    } else {
+        val entry = legalityOf(catalog, parts)
+        allowedFlags = entry?.allowedFlags ?: emptyList()
+        forcedFlags = entry?.forcedFlags ?: emptyList()
+    }
     fun resolve(forced: Boolean, allowed: Boolean, on: Boolean): Boolean =
         if (forced) true else allowed && on
     return parts.copy(
         threeD = resolve(
-            entry.forcedFlags.contains("three_d"),
-            entry.allowedFlags.contains("three_d"),
+            forcedFlags.contains("three_d"),
+            allowedFlags.contains("three_d"),
             parts.threeD,
         ),
         hfr = resolve(
-            entry.forcedFlags.contains("hfr"),
-            entry.allowedFlags.contains("hfr"),
+            forcedFlags.contains("hfr"),
+            allowedFlags.contains("hfr"),
             parts.hfr,
         ),
         dbox = resolve(
-            entry.forcedFlags.contains("dbox"),
-            entry.allowedFlags.contains("dbox"),
+            forcedFlags.contains("dbox"),
+            allowedFlags.contains("dbox"),
             parts.dbox,
         ),
     )
@@ -113,6 +123,40 @@ fun FormatPicker(
             ) { key ->
                 update(parts.copy(medium = key, mediumCustom = if (key == "custom") parts.mediumCustom else ""))
             }
+            val entry = catalog.homeLegal.firstOrNull { it.medium == parts.medium }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (entry == null) {
+                    Text("no presentation options")
+                } else {
+                    catalog.flagLabels.forEach { flag ->
+                        val allowed = entry.allowedFlags.contains(flag.key)
+                        val forced = entry.forcedFlags.contains(flag.key)
+                        if (allowed) {
+                            val checked = when (flag.key) {
+                                "three_d" -> parts.threeD
+                                "hfr" -> parts.hfr
+                                else -> parts.dbox
+                            }
+                            Checkbox(
+                                checked = checked,
+                                enabled = !forced,
+                                onCheckedChange = { on ->
+                                    update(
+                                        when (flag.key) {
+                                            "three_d" -> parts.copy(threeD = on)
+                                            "hfr" -> parts.copy(hfr = on)
+                                            else -> parts.copy(dbox = on)
+                                        },
+                                    )
+                                },
+                            )
+                            Text(flag.label, style = MaterialTheme.typography.bodyMedium)
+                            Spacer(Modifier.width(10.dp))
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
         } else {
             val screens = catalog.screens.firstOrNull { it.key == parts.family }
             OptionField(

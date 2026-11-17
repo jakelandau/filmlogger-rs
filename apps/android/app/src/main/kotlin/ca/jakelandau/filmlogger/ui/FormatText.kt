@@ -100,6 +100,7 @@ object FormatText {
         "dvd" -> HomeMedium.Dvd
         "hd_dvd" -> HomeMedium.HdDvd
         "bluray" -> HomeMedium.BluRay
+        "bluray_3d" -> HomeMedium.BluRay3D
         "uhd_bluray" -> HomeMedium.UhdBluRay
         "laserdisc" -> HomeMedium.LaserDisc
         "streaming" -> HomeMedium.Streaming
@@ -118,7 +119,11 @@ object FormatText {
     /** Build a [`Format`] for `parts.venue` from the flattened parts. */
     fun build(parts: FormatParts): Format =
         if (parts.venue == Venue.HOME) {
-            Format.Home(mediumVariant(parts.medium, parts.mediumCustom))
+            Format.Home(
+                medium = mediumVariant(parts.medium, parts.mediumCustom),
+                threeD = parts.threeD,
+                hfr = parts.hfr,
+            )
         } else {
             Format.Theatre(
                 projection = projectionFor(parts.family, parts.tech, parts.techCustom),
@@ -146,8 +151,8 @@ object FormatText {
                 screenCustom = "",
                 medium = medium,
                 mediumCustom = mediumCustom,
-                threeD = false,
-                hfr = false,
+                threeD = home?.threeD ?: false,
+                hfr = home?.hfr ?: false,
                 dbox = false,
             )
         }
@@ -223,6 +228,7 @@ object FormatText {
         HomeMedium.Dvd -> "dvd" to ""
         HomeMedium.HdDvd -> "hd_dvd" to ""
         HomeMedium.BluRay -> "bluray" to ""
+        HomeMedium.BluRay3D -> "bluray_3d" to ""
         HomeMedium.UhdBluRay -> "uhd_bluray" to ""
         HomeMedium.LaserDisc -> "laserdisc" to ""
         HomeMedium.Streaming -> "streaming" to ""

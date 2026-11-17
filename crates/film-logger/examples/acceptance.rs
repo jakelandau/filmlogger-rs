@@ -90,6 +90,8 @@ fn main() {
             Venue::Home,
             Format::Home {
                 medium: HomeMedium::BluRay,
+                three_d: false,
+                hfr: false,
             },
             &NewLogDetails::default(),
         )
@@ -107,6 +109,8 @@ fn main() {
     let mut home = WatchLog::now(film_logger::FilmId::Tmdb(999), "A Home Film", Venue::Home);
     home.format = Some(Format::Home {
         medium: HomeMedium::BluRay,
+        three_d: false,
+        hfr: false,
     });
     logger.store().insert(home).unwrap();
     println!("added: A Home Film (direct)");

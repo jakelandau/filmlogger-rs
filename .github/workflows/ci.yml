@@ -37,13 +37,15 @@ jobs:
   live-smoke:
     name: Live TMDB smoke
     needs: rust
-    if: ${{ env.TMDB_API_KEY != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # `env` is not a valid context in a job-level `if`, so the gate lives on
+      # the step; the workflow-level `TMDB_API_KEY` env is visible here.
       - name: Live smoke (requires the TMDB_API_KEY secret)
+        if: env.TMDB_API_KEY != ''
         run: cargo run -p film-logger --example tmdb_smoke
 
   ui:

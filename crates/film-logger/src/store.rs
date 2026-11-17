@@ -19,7 +19,9 @@ use rusqlite::backup::Backup;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::Serialize;
 
-use crate::domain::{FilmId, FilmListEntry, FilmMetadata, Format, Genre, Rating, Settings, Venue, WatchLog};
+use crate::domain::{
+    FilmId, FilmListEntry, FilmMetadata, Format, Genre, Rating, Settings, Venue, WatchLog,
+};
 use crate::error::Error;
 
 /// The `settings` table row key for the [`Settings`] document.
@@ -361,10 +363,10 @@ impl Store {
                 }
                 total_runtime_minutes += runtime;
             }
-            first_viewed_at = Some(
-                first_viewed_at.map_or(log.watched_at, |first| first.min(log.watched_at)),
-            );
-            last_viewed_at = Some(last_viewed_at.map_or(log.watched_at, |last| last.max(log.watched_at)));
+            first_viewed_at =
+                Some(first_viewed_at.map_or(log.watched_at, |first| first.min(log.watched_at)));
+            last_viewed_at =
+                Some(last_viewed_at.map_or(log.watched_at, |last| last.max(log.watched_at)));
             *by_year.entry(log.watched_at.year()).or_default() += 1;
             *by_month
                 .entry(format!(

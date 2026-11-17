@@ -76,3 +76,17 @@ also uses the Actions run number as `versionCode`.
 The repository and local folder are intended to be named `filmlogger-rs`.
 The GitHub repository should be renamed to `jakelandau/filmlogger-rs` and the
 remote updated accordingly before relying on the updater URLs.
+
+## macOS
+
+CI builds the desktop shell in release mode on `macos-latest` (UI bundle plus
+`cargo build --release -p film-logger-desktop`), so an Apple-only regression
+fails the build instead of surfacing at the first macOS release.
+
+No macOS artifact is published: Gatekeeper blocks an unsigned or un-notarized
+`.dmg` for anyone who downloads it, so a macOS release waits for an Apple
+Developer ID. When that exists, add `macos-latest` with `bundles: dmg` to the
+`release.yml` desktop matrix and set `APPLE_CERTIFICATE`,
+`APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
+`APPLE_PASSWORD`, and `APPLE_TEAM_ID`; tauri-action then codesigns, notarizes,
+and staples the bundle.

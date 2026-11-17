@@ -5,6 +5,8 @@ import { el } from "../dom";
 import { api } from "../api";
 import { getState, reload, rerender, showError } from "../app";
 import { CREDIT_GROUPS, TMDB_ATTRIBUTION } from "../credits";
+import { boardFlagUrl } from "../cert-icons";
+import { clearFilmCaches } from "./films";
 import { checkForUpdates } from "../updates";
 
 const DB_FILTERS = [{ name: "SQLite database", extensions: ["db"] }];
@@ -13,6 +15,7 @@ export function renderSettings(content: HTMLElement): void {
   const board = getState().settings.selected_board;
 
   content.append(el("h3", {}, "Rating board"));
+  content.append(el("p", { class: "muted" }, "Choose the board shown beside each log."));
   const boardBox = el("div", { class: "board-select" });
   for (const option of getState().ratingBoards) {
     const radio = el("input", {
@@ -30,11 +33,32 @@ export function renderSettings(content: HTMLElement): void {
         showError(e);
       }
     });
-    boardBox.append(el("label", {}, radio, " " + option.name));
+    boardBox.append(
+      el(
+        "label",
+        {},
+        radio,
+        " ",
+        el("img", {
+          class: "board-flag",
+          src: boardFlagUrl(option.region),
+          alt: option.region,
+        }),
+        " " + option.name
+      )
+    );
   }
   content.append(boardBox);
 
-  content.append(el("h3", {}, "Export database"));
+  content.append(el("h3", {}, "Database"));
+  content.append(
+    el(
+      "p",
+      { class: "muted" },
+      "Export a copy of the database, or replace the current log with a backup."
+    )
+  );
+  const ioStatus = el("p", { class: "io-status muted" });
   const exportBtn = el(
     "button",
     {
@@ -47,18 +71,15 @@ export function renderSettings(content: HTMLElement): void {
           });
           if (path) {
             await api.exportTo(path);
-            alert("Exported to " + path);
+            ioStatus.textContent = "Exported database.";
           }
         } catch (e) {
           showError(e);
         }
       },
     },
-    "Export…"
+    "Export database"
   );
-  content.append(el("div", { class: "io-row" }, exportBtn));
-
-  content.append(el("h3", {}, "Import database"));
   const importBtn = el(
     "button",
     {
@@ -72,17 +93,19 @@ export function renderSettings(content: HTMLElement): void {
           });
           if (typeof path === "string" && confirm("Replace all current data?")) {
             await api.importFrom(path);
+            clearFilmCaches();
             await reload();
             rerender();
+            ioStatus.textContent = "Imported database.";
           }
         } catch (e) {
           showError(e);
         }
       },
     },
-    "Import…"
+    "Import database"
   );
-  content.append(el("div", { class: "io-row" }, importBtn));
+  content.append(el("div", { class: "io-row" }, exportBtn, importBtn), ioStatus);
 
   content.append(el("h3", {}, "Updates"));
   const updateStatus = el("p", { class: "muted" });
@@ -92,7 +115,7 @@ export function renderSettings(content: HTMLElement): void {
       class: "btn",
       onclick: async () => {
         updateBtn.disabled = true;
-        updateStatus.textContent = "Checking for updates…";
+        updateStatus.textContent = "Checking…";
         try {
           updateStatus.textContent = await checkForUpdates(false);
         } catch (e) {
@@ -107,7 +130,7 @@ export function renderSettings(content: HTMLElement): void {
   );
   content.append(el("div", { class: "io-row" }, updateBtn), updateStatus);
 
-  content.append(el("h3", {}, "Licenses / credits"));
+  content.append(el("h3", {}, "Licenses & credits"));
   content.append(
     el(
       "p",

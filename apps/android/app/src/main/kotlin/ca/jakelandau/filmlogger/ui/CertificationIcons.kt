@@ -3,6 +3,7 @@ package ca.jakelandau.filmlogger.ui
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 
@@ -23,12 +24,12 @@ fun certificationIconUrl(region: String, rating: String): String? {
 }
 
 @Composable
-fun CertificationIcon(region: String, rating: String) {
+fun CertificationIcon(region: String, rating: String, size: Dp = 18.dp) {
     val url = certificationIconUrl(region, rating) ?: return
     AsyncImage(
         model = url,
         contentDescription = null,
-        modifier = Modifier.size(18.dp),
+        modifier = Modifier.size(size),
     )
 }
 

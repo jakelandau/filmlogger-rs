@@ -28,6 +28,19 @@ const collectionCache = new Map<number, Collection>();
 const collectionLoading = new Set<number>();
 const collectionFailed = new Set<number>();
 
+/**
+ * Drop every cached TMDB lookup the Films tab holds. An import replaces the
+ * whole database, so collection membership resolved against the old one is
+ * no longer trustworthy.
+ */
+export function clearFilmCaches(): void {
+  collectionCache.clear();
+  collectionLoading.clear();
+  collectionFailed.clear();
+  tmdbResults = null;
+  searchedQuery = "";
+}
+
 export function renderFilms(content: HTMLElement): void {
   const films = getState().films;
   content.append(renderControls());
@@ -71,12 +84,9 @@ export function renderFilms(content: HTMLElement): void {
     for (const entry of visible) list.append(renderRow(entry));
   } else if (films.length === 0) {
     list.append(
-      el(
-        "p",
-        { class: "empty" },
-        "No films yet. ",
-        el("button", { class: "link", onclick: () => go("add") }, "Add your first film")
-      )
+      el("h3", {}, "No films yet"),
+      el("p", { class: "empty" }, "Search TMDB or add a film from the Add tab."),
+      el("button", { class: "btn", onclick: () => go("add") }, "Add your first film")
     );
   } else if (tmdbResults != null) {
     list.append(el("p", { class: "empty" }, "No local matches."));
@@ -470,7 +480,7 @@ function renderControls(): HTMLElement {
     el("input", {
       class: "search",
       type: "text",
-      placeholder: tab === "collections" ? "Search collections…" : "Search films…",
+      placeholder: tab === "collections" ? "Search collections" : "Search films",
       value: search,
       oninput: (e: Event) => {
         search = (e.currentTarget as HTMLInputElement).value;

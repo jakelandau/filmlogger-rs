@@ -44,7 +44,7 @@ import uniffi.film_logger_ffi.Rating
 import uniffi.film_logger_ffi.Venue
 import uniffi.film_logger_ffi.WatchLog
 
-private enum class LogSort { RECENT, OLDEST, TITLE }
+private enum class LogSort { RECENT, OLDEST, TITLE, RATING }
 
 // Density-independent spacing keeps the card rhythm stable across devices.
 private val CardPadding = 16.dp
@@ -56,6 +56,12 @@ private fun utcMillis(log: WatchLog): Long = Instant.parse(log.watchedAt).toEpoc
 
 private fun utcYear(log: WatchLog): Int =
     Instant.parse(log.watchedAt).atZone(ZoneOffset.UTC).year
+
+private fun ratingRank(rating: Rating?): Int = when (rating) {
+    Rating.UP -> 0
+    Rating.DOWN -> 1
+    null -> 2
+}
 
 /**
  * Filter and sort logs for display, matching the desktop list semantics:
@@ -84,6 +90,9 @@ private fun filterLogs(
         LogSort.OLDEST -> matched.sortedWith(recent.reversed())
         LogSort.TITLE -> matched.sortedWith(
             compareBy<WatchLog> { it.title.lowercase() }.then(recent),
+        )
+        LogSort.RATING -> matched.sortedWith(
+            compareBy<WatchLog> { ratingRank(it.rating) }.then(recent),
         )
     }
 }
@@ -177,13 +186,15 @@ fun LogsView(
                         LogSort.RECENT -> "recent"
                         LogSort.OLDEST -> "oldest"
                         LogSort.TITLE -> "title"
+                        LogSort.RATING -> "rating"
                     },
-                    listOf("recent" to "Most recent", "oldest" to "Oldest", "title" to "Title"),
+                    listOf("recent" to "Most recent", "oldest" to "Oldest first", "title" to "Title", "rating" to "Rating"),
                     Modifier.weight(1f),
                 ) { key ->
                     sort = when (key) {
                         "oldest" -> LogSort.OLDEST
                         "title" -> LogSort.TITLE
+                        "rating" -> LogSort.RATING
                         else -> LogSort.RECENT
                     }
                 }

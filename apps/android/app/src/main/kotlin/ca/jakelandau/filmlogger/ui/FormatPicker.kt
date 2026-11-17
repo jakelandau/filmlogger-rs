@@ -192,7 +192,7 @@ fun FormatPicker(
                 update(parts.copy(tech = key, techCustom = if (key == "custom") parts.techCustom else ""))
             }
             OptionField(
-                "Screen",
+                "Auditorium",
                 parts.screen,
                 withLegacy(options(screens), parts.screen, parts.screenCustom),
             ) { key ->

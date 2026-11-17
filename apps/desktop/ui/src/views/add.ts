@@ -164,7 +164,7 @@ function renderSearch(): HTMLElement {
   const input = el("input", {
     class: "search",
     type: "text",
-    placeholder: "Search films…",
+    placeholder: "Search films",
     value: add.query,
     oninput: (e: Event) => {
       add.query = (e.currentTarget as HTMLInputElement).value;
@@ -207,14 +207,17 @@ function renderResults(): HTMLElement {
   // Before a search is entered, show the popular films so the list isn't
   // empty; once a search has run, show its results instead.
   const list = add.searched ? add.results : add.popular;
-  if (!add.searched) {
-    box.append(el("p", { class: "results-label" }, "Popular right now"));
-    if (add.popularLoading) {
-      box.append(el("p", { class: "empty" }, "Loading…"));
-      return box;
-    }
+  box.append(
+    el("p", { class: "results-label" }, add.searched ? "Results" : "Popular right now")
+  );
+  if (!add.searched && add.popularLoading) {
+    box.append(el("p", { class: "empty" }, "Loading…"));
+    return box;
   }
-  if (list.length === 0) return box;
+  if (list.length === 0) {
+    if (add.searched) box.append(el("p", { class: "empty" }, "No TMDB results."));
+    return box;
+  }
   const ul = el("ul", { class: "result-list" });
   for (const r of list) ul.append(renderResultRow(r));
   box.append(ul);
@@ -415,8 +418,8 @@ function renderDetails(): HTMLElement {
     "select",
     {},
     el("option", { value: "", disabled: true }, "Choose a rating"),
-    el("option", { value: "up" }, "👍"),
-    el("option", { value: "down" }, "👎")
+    el("option", { value: "up" }, "👍 Up"),
+    el("option", { value: "down" }, "👎 Down")
   );
   rating.value = add.rating;
   rating.addEventListener("change", () => {

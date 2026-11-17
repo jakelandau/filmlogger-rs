@@ -79,6 +79,9 @@ fun MainScreen() {
     var filmId by remember { mutableStateOf<String?>(null) }
     var filmPage by remember { mutableStateOf<FilmPage?>(null) }
     var preselected by remember { mutableStateOf<FilmMetadata?>(null) }
+    // Bumped when the database is replaced by an import, so per-tab caches
+    // (resolved collections) are rebuilt from the new data.
+    var dataEpoch by remember { mutableStateOf(0) }
 
     suspend fun refresh(l: Logger) {
         val triple = withContext(Dispatchers.IO) {
@@ -305,10 +308,6 @@ fun MainScreen() {
                             logger = l,
                             page = filmPage,
                             selectedBoard = board,
-                            onBack = {
-                                filmId = null
-                                filmPage = null
-                            },
                             onLogAnother = { film ->
                                 preselected = film
                                 filmId = null
@@ -337,7 +336,15 @@ fun MainScreen() {
                                 FilmsView(
                                     logger = l,
                                     films = films,
+                                    dataEpoch = dataEpoch,
                                     onOpen = { entry -> openFilm(filmKeyOf(entry)) },
+                                    onAdd = {
+                                        preselected = null
+                                        editingId = null
+                                        filmId = null
+                                        filmPage = null
+                                        tab = TABS_ADD
+                                    },
                                     onOpenTmdb = { tmdbId ->
                                         scope.launch {
                                             try {
@@ -368,13 +375,17 @@ fun MainScreen() {
                                     onError = { status = it },
                                 )
 
-                            TABS_STATS -> stats?.let { StatsView(it, cat) }
+                            TABS_STATS -> StatsView(stats = stats, catalog = cat, logs = logs)
 
                             TABS_SETTINGS ->
                                 SettingsView(
                                     logger = l,
                                     boards = boards,
                                     onSettingsChanged = { refresh() },
+                                    onImported = {
+                                        dataEpoch += 1
+                                        refresh()
+                                    },
                                     onError = { status = it },
                                 )
                         }

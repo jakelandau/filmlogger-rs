@@ -8,7 +8,7 @@ import { startAddForFilm } from "./add";
 import { certificationIcon } from "../cert-icons";
 import { formatFamilyBadge } from "../format-family";
 import { formatFlagsRow } from "../format-flags";
-import type { Certifications, FilmPage } from "../types";
+import type { Certifications, FilmPage, FilmStats } from "../types";
 
 const IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
 
@@ -52,7 +52,7 @@ function renderHeader(page: FilmPage): HTMLElement {
     ? el("img", { class: "poster film-poster", src: IMAGE_BASE + film.poster_path, alt: "" })
     : el("div", { class: "poster film-poster placeholder" });
 
-  const certs = certificationsLine(film.certifications);
+  const certs = certificationsLine(film.certifications, getState().settings.selected_board);
   const meta: string[] = [];
   if (film.release_year != null) meta.push(String(film.release_year));
   if (film.runtime_minutes != null) meta.push(`${film.runtime_minutes} min`);
@@ -91,28 +91,24 @@ function renderHeader(page: FilmPage): HTMLElement {
   );
 }
 
-function certificationsLine(certs: Certifications | null): HTMLElement | null {
-  if (certs == null) return null;
-  const entries = Object.entries(certs);
-  if (entries.length === 0) return null;
-  const line = el("div", { class: "dim certifications" });
-  entries.forEach(([region, rating], index) => {
-    if (index > 0) line.append(" · ");
-    const icon = certificationIcon(region, rating);
-    if (icon != null) {
-      line.append(
-        el("img", {
-          class: "cert-icon",
-          src: icon,
-          alt: "",
-          onerror: (e: Event) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          },
-        })
-      );
-    }
-    line.append(`${region} ${rating}`);
-  });
+function certificationsLine(certs: Certifications | null, region: string): HTMLElement | null {
+  const rating = certs?.[region];
+  if (rating == null) return null;
+  const line = el("div", { class: "certifications" });
+  const icon = certificationIcon(region, rating);
+  if (icon != null) {
+    line.append(
+      el("img", {
+        class: "cert-icon",
+        src: icon,
+        alt: "",
+        onerror: (e: Event) => {
+          (e.currentTarget as HTMLImageElement).style.display = "none";
+        },
+      })
+    );
+  }
+  line.append(`${region} ${rating}`);
   return line;
 }
 
@@ -165,12 +161,9 @@ function renderStats(page: FilmPage): HTMLElement {
     el(
       "div",
       { class: "dim" },
-      `${stats.viewings} total · ${stats.theatre} theatre · ${stats.home} home` +
-        (stats.first_watched_at
-          ? ` · first ${formatDisplay(stats.first_watched_at)}`
-          : "") +
-        (stats.last_watched_at ? ` · last ${formatDisplay(stats.last_watched_at)}` : "")
+      `${stats.viewings} total · ${stats.theatre} theatre · ${stats.home} home`
     ),
+    boundsLine(stats),
     formats.length > 0
       ? el(
           "div",
@@ -181,6 +174,13 @@ function renderStats(page: FilmPage): HTMLElement {
         )
       : ""
   );
+}
+
+function boundsLine(stats: FilmStats): HTMLElement | null {
+  const bounds: string[] = [];
+  if (stats.first_watched_at != null) bounds.push(`First ${formatDisplay(stats.first_watched_at)}`);
+  if (stats.last_watched_at != null) bounds.push(`Last ${formatDisplay(stats.last_watched_at)}`);
+  return bounds.length > 0 ? el("div", { class: "dim" }, bounds.join(" · ")) : null;
 }
 
 function renderHistory(page: FilmPage): HTMLElement {
@@ -206,8 +206,10 @@ function renderHistory(page: FilmPage): HTMLElement {
               "div",
               { class: "log-title" },
               formatDisplay(log.watched_at, log.timezone),
-              log.rewatch ? el("span", { class: "badge rewatch" }, " rewatch") : "",
-              log.rating ? el("span", { class: "badge" }, log.rating === "up" ? "👍" : "👎") : ""
+              log.rewatch ? el("span", { class: "badge rewatch" }, "Rewatch") : "",
+              log.rating
+                ? el("span", { class: "badge" }, log.rating === "up" ? "👍 Liked" : "👎 Disliked")
+                : ""
             ),
             el(
               "div",

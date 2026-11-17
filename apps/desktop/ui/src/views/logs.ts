@@ -22,7 +22,7 @@ export function renderLogs(content: HTMLElement): void {
       el(
         "p",
         { class: "empty" },
-        "No films logged yet. ",
+        "No films logged yet ",
         el("button", { class: "link", onclick: () => go("add") }, "Add your first film")
       )
     );
@@ -160,7 +160,12 @@ function renderFilterBar(): HTMLElement {
     { class: "filter-bar logs-filter" },
     el("div", { class: "filter-top" }, text, filterButton),
     filtersExpanded ? el("div", { class: "filter-group" }, venueChips, ratingChips) : "",
-    el("div", { class: "filter-row" }, year, sort)
+    el(
+      "div",
+      { class: "filter-row" },
+      el("div", { class: "filter-field" }, el("label", {}, "Year"), year),
+      el("div", { class: "filter-field" }, el("label", {}, "Sort"), sort)
+    )
   );
   return bar;
 }
@@ -174,7 +179,7 @@ function certificationFor(log: WatchLog, board: string): string | null {
 function certificationBadge(region: string, cert: string | null): HTMLElement {
   const badge = el("span", { class: "badge" + (cert ? "" : " unrated") });
   if (cert == null) {
-    badge.append("unrated");
+    badge.append("Unrated");
     return badge;
   }
   const icon = certificationIcon(region, cert);
@@ -223,7 +228,7 @@ function renderRow(log: WatchLog): HTMLElement {
         { class: "log-title" },
         log.title,
         log.release_year != null ? el("span", { class: "dim" }, ` (${log.release_year})`) : "",
-        log.rewatch ? el("span", { class: "badge rewatch" }, " rewatch") : ""
+        log.rewatch ? el("span", { class: "badge rewatch" }, "Rewatch") : ""
       ),
       el(
         "div",

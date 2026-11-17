@@ -127,6 +127,13 @@ pub enum Error {
         detail: String,
     },
 
+    /// An export destination was rejected.
+    #[error("export rejected: {detail}")]
+    InvalidExport {
+        /// Why the destination was rejected.
+        detail: String,
+    },
+
     /// The film has no TMDB id, so it cannot be refreshed.
     #[error("film {film_id:?} has no TMDB id")]
     NoTmdbId {

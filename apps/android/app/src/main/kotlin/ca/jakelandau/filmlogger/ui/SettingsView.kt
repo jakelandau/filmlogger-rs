@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -61,6 +62,7 @@ fun SettingsView(
     logger: Logger,
     boards: List<RatingBoard>,
     onSettingsChanged: () -> Unit,
+    onImported: () -> Unit,
     onError: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -72,6 +74,8 @@ fun SettingsView(
     var showLicenses by remember { mutableStateOf(false) }
     var updateBusy by remember { mutableStateOf(false) }
     var updateStatus by remember { mutableStateOf<String?>(null) }
+    var ioStatus by remember { mutableStateOf<String?>(null) }
+    var pendingImport by remember { mutableStateOf<Uri?>(null) }
 
     suspend fun loadSettings() {
         settings = try {
@@ -93,6 +97,7 @@ fun SettingsView(
     fun exportToUri(uri: Uri?) {
         if (uri == null) return
         busy = true
+        ioStatus = null
         scope.launch {
             try {
                 val file = File(context.cacheDir, "film-logger.db")
@@ -100,6 +105,7 @@ fun SettingsView(
                 context.contentResolver.openOutputStream(uri)?.use { output ->
                     file.inputStream().use { it.copyTo(output) }
                 }
+                ioStatus = "Exported database."
             } catch (e: Exception) {
                 onError(e.message ?: "export failed")
             } finally {
@@ -111,6 +117,7 @@ fun SettingsView(
     fun importFromUri(uri: Uri?) {
         if (uri == null) return
         busy = true
+        ioStatus = null
         scope.launch {
             try {
                 val file = File(context.cacheDir, "film-logger-import.db")
@@ -118,7 +125,8 @@ fun SettingsView(
                     file.outputStream().use { input.copyTo(it) }
                 }
                 withContext(Dispatchers.IO) { logger.importFrom(file.absolutePath) }
-                onSettingsChanged()
+                ioStatus = "Imported database."
+                onImported()
             } catch (e: Exception) {
                 onError(e.message ?: "import failed")
             } finally {
@@ -131,9 +139,33 @@ fun SettingsView(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri -> exportToUri(uri) }
 
+    // Any document type: a desktop-exported `.db` synced through Drive or
+    // Downloads is often reported as `application/x-sqlite3` or as binary
+    // data, so the octet-stream filter alone would hide it.
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
-    ) { uri -> importFromUri(uri) }
+    ) { uri -> pendingImport = uri }
+
+    pendingImport?.let { uri ->
+        AlertDialog(
+            onDismissRequest = { pendingImport = null },
+            title = { Text("Import database") },
+            text = { Text("Replace all current data?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingImport = null
+                    importFromUri(uri)
+                }) {
+                    Text("Import")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingImport = null }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 
     if (showLicenses) {
         LicensesPage(onBack = { showLicenses = false })
@@ -146,7 +178,7 @@ fun SettingsView(
             .verticalScroll(rememberScrollState())
             .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
     ) {
-        Text("Certification board", style = MaterialTheme.typography.titleLarge)
+        Text("Rating board", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
         Text(
             "Choose the board shown beside each log.",
@@ -223,11 +255,19 @@ fun SettingsView(
         }
         Spacer(Modifier.height(10.dp))
         Button(
-            onClick = { importLauncher.launch(arrayOf("application/octet-stream")) },
+            onClick = { importLauncher.launch(arrayOf("*/*")) },
             enabled = !busy,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Import database", style = MaterialTheme.typography.labelLarge)
+        }
+        ioStatus?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Spacer(Modifier.height(24.dp))
 

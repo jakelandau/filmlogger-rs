@@ -351,10 +351,31 @@ pub struct Stats {
     pub viewings_by_medium: Vec<CountEntry>,
     /// Viewings per presentation flag: `three_d`, `hfr`, or `dbox`.
     pub viewings_by_flag: Vec<CountEntry>,
+    /// Viewings per rating (up, down, unrated).
+    pub ratings: RatingCounts,
+    /// Viewings per genre name of the logged film, ascending.
+    pub viewings_by_genre: Vec<CountEntry>,
+    /// Total runtime of every viewing, in minutes (0 when unknown).
+    pub total_runtime_minutes: u32,
+    /// The earliest `watched_at` across all logs, if any (RFC 3339).
+    pub first_viewed_at: Option<String>,
+    /// The latest `watched_at` across all logs, if any (RFC 3339).
+    pub last_viewed_at: Option<String>,
     /// Viewings flagged as a rewatch.
     pub rewatches: u32,
     /// Top films by viewing count, descending (title as tie-break).
     pub top_films: Vec<FilmViewings>,
+}
+
+/// Viewings broken down by rating.
+#[derive(uniffi::Record, Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub struct RatingCounts {
+    /// Viewings rated thumbs up.
+    pub up: u32,
+    /// Viewings rated thumbs down.
+    pub down: u32,
+    /// Viewings left unrated.
+    pub unrated: u32,
 }
 
 /// Viewings broken down by venue.
@@ -650,6 +671,8 @@ pub enum LoggerError {
     InvalidWatchCount { count: i32 },
     /// An import file was rejected.
     InvalidImport { detail: String },
+    /// An export destination was rejected.
+    InvalidExport { detail: String },
     /// The film has no TMDB id, so it cannot be refreshed.
     NoTmdbId { film_id: FilmId },
     /// A film id string could not be parsed.
@@ -686,6 +709,7 @@ impl std::fmt::Display for LoggerError {
                 write!(f, "watch count {count} is less than 1")
             }
             Self::InvalidImport { detail } => write!(f, "import rejected: {detail}"),
+            Self::InvalidExport { detail } => write!(f, "export rejected: {detail}"),
             Self::NoTmdbId { film_id } => write!(f, "film {film_id:?} has no TMDB id"),
             Self::InvalidFilmId { value } => write!(f, "invalid film id: {value}"),
             Self::InvalidStoredLog { id } => write!(f, "stored log {id} is corrupt"),

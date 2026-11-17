@@ -42,7 +42,6 @@ fun FilmView(
     logger: Logger,
     page: FilmPage?,
     selectedBoard: String,
-    onBack: () -> Unit,
     onReload: () -> Unit,
     onLogAnother: (FilmMetadata) -> Unit,
     onChanged: () -> Unit,
@@ -74,7 +73,6 @@ fun FilmView(
     ) {
         item {
             Column {
-                TextButton(onClick = onBack) { Text("← Films", style = MaterialTheme.typography.labelLarge) }
                 Row {
                     val poster = posterUrl(film.posterPath)
                     if (poster != null) {
@@ -92,7 +90,7 @@ fun FilmView(
                     Column(Modifier.weight(1f)) {
                         val year = film.releaseYear
                         Text(
-                            if (year != null) "${film.title} ($year)" else film.title,
+                            film.title,
                             style = MaterialTheme.typography.headlineSmall,
                         )
                         val meta = buildList {
@@ -128,7 +126,7 @@ fun FilmView(
                     Button(
                         onClick = { onLogAnother(film) },
                         modifier = Modifier.weight(1f),
-                    ) { Text("Log viewing", style = MaterialTheme.typography.labelLarge) }
+                    ) { Text("Log another viewing", style = MaterialTheme.typography.labelLarge) }
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
@@ -177,7 +175,7 @@ fun FilmView(
                 OutlinedButton(
                     onClick = { mutate { logger.refreshFilm(film.filmId) } },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Refresh Metadata", style = MaterialTheme.typography.labelLarge) }
+                ) { Text("Refresh metadata", style = MaterialTheme.typography.labelLarge) }
                 Spacer(Modifier.height(18.dp))
                 val stats = page.stats
                 Surface(
@@ -194,18 +192,14 @@ fun FilmView(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        stats.firstWatchedAt?.let {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "First ${TimeUtils.display(it)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        val bounds = buildList {
+                            stats.firstWatchedAt?.let { add("First ${TimeUtils.display(it)}") }
+                            stats.lastWatchedAt?.let { add("Last ${TimeUtils.display(it)}") }
                         }
-                        stats.lastWatchedAt?.let {
+                        if (bounds.isNotEmpty()) {
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "Last ${TimeUtils.display(it)}",
+                                bounds.joinToString(" · "),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -234,10 +228,17 @@ fun FilmView(
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        TimeUtils.display(log.watchedAt, zone) +
-                            if (log.rewatch) "  · Rewatch" else "",
+                        TimeUtils.display(log.watchedAt, zone),
                         style = MaterialTheme.typography.titleSmall,
                     )
+                    if (log.rewatch) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Rewatch",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                     Spacer(Modifier.height(4.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         FormatFamilyBadge(log.format)
@@ -255,7 +256,7 @@ fun FilmView(
                     log.rating?.let {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            if (it == uniffi.film_logger_ffi.Rating.UP) "👍 Thumbs up" else "👎 Thumbs down",
+                            if (it == uniffi.film_logger_ffi.Rating.UP) "👍 Liked" else "👎 Disliked",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -270,23 +271,14 @@ fun FilmView(
 
 @Composable
 private fun CertificationLine(certs: Certifications?, region: String) {
-    val value = certs?.values?.firstOrNull { it.region == region }
+    val value = certs?.values?.firstOrNull { it.region == region } ?: return
     Spacer(Modifier.height(6.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (value != null) {
-            CertificationIcon(value.region, value.rating)
-            Spacer(Modifier.width(6.dp))
-            Text(
-                "${value.region} ${value.rating}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Text(
-                "Unrated",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        CertificationIcon(value.region, value.rating, size = 30.dp)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            "${value.region} ${value.rating}",
+            style = MaterialTheme.typography.titleMedium,
+        )
     }
 }

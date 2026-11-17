@@ -13,7 +13,7 @@ import java.time.format.DateTimeFormatter
  */
 object TimeUtils {
     private val localFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-    private val displayFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy, HH:mm")
+    private val displayFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy, HH:mm zzz")
 
     fun systemZone(): ZoneId = ZoneId.systemDefault()
 

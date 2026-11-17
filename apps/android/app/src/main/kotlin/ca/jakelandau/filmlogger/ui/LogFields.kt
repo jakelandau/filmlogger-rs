@@ -59,7 +59,7 @@ fun LogFields(
     rating: Rating?,
     onRating: (Rating) -> Unit,
 ) {
-    FormatFields(catalog, venue, onVenue, format, onFormat)
+    FormatFields(catalog, venue, onVenue, format, onFormat, showFormatHeading = true)
     Spacer(Modifier.height(8.dp))
     ViewingFields(timezone, onTimezone, watchedAtInput, onWatchedAt, rating, onRating)
 }
@@ -71,6 +71,7 @@ fun FormatFields(
     onVenue: (Venue) -> Unit,
     format: Format?,
     onFormat: (Format) -> Unit,
+    showFormatHeading: Boolean = false,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -82,6 +83,11 @@ fun FormatFields(
         RadioChoice(venue == Venue.HOME, { onVenue(Venue.HOME) }, "Home")
     }
     Spacer(Modifier.height(8.dp))
+
+    if (showFormatHeading) {
+        Text("Viewing format", style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.height(6.dp))
+    }
 
     key(venue) {
         FormatPicker(catalog, venue, format, onFormat)
@@ -98,7 +104,7 @@ fun ViewingFields(
     onRating: (Rating) -> Unit,
 ) {
     Text(
-        "Time Zone",
+        "Time zone",
         modifier = Modifier.fillMaxWidth(),
         textAlign = TextAlign.Center,
         style = MaterialTheme.typography.titleSmall,

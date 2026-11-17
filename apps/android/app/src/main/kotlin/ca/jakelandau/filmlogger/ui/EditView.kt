@@ -1,6 +1,8 @@
 package ca.jakelandau.filmlogger.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -66,7 +68,7 @@ fun EditView(
         }
         val parsed = TimeUtils.fromLocalInput(watchedAtInput, TimeUtils.zone(timezone))
         if (parsed.isEmpty()) {
-            onError("Invalid date or time zone, use yyyy-MM-dd HH:mm")
+            onError("Invalid watched-at date or time zone")
             return
         }
         busy = true
@@ -111,19 +113,6 @@ fun EditView(
             .imePadding()
             .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
     ) {
-        Text(log.title.ifBlank { "Untitled" }, style = MaterialTheme.typography.headlineSmall)
-        val year = log.releaseYear
-        Text(
-            year?.let { "($it)" } ?: "",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Watched ${TimeUtils.display(log.watchedAt, TimeUtils.zone(timezone))}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Text(
             "Viewing ${log.watchCount ?: 1u} of this film" + if (log.rewatch) " · rewatch" else "",
             style = MaterialTheme.typography.bodyMedium,
@@ -149,8 +138,24 @@ fun EditView(
         )
         Spacer(Modifier.height(12.dp))
 
-        OutlinedButton(onClick = { doSave() }, enabled = !busy && rating != null, modifier = Modifier.fillMaxWidth()) {
-            Text("Save")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedButton(
+                onClick = { doSave() },
+                enabled = !busy && rating != null,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Save")
+            }
+            OutlinedButton(
+                onClick = onDone,
+                enabled = !busy,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Cancel")
+            }
         }
         Spacer(Modifier.height(24.dp))
         TextButton(
@@ -172,7 +177,7 @@ fun EditView(
             onDismissRequest = { if (!busy) showDeleteConfirm = false },
             title = { Text("Delete viewing?") },
             text = {
-                Text("Delete “${log.title.ifBlank { "this viewing" }}” from the log? This cannot be undone.")
+                Text("Delete “${log.title}”? This cannot be undone.")
             },
             confirmButton = {
                 TextButton(

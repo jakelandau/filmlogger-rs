@@ -67,15 +67,17 @@ private val filmTabs = listOf(
 fun FilmsView(
     logger: Logger,
     films: List<FilmListEntry>,
+    dataEpoch: Int,
     onOpen: (FilmListEntry) -> Unit,
     onOpenTmdb: (Long) -> Unit,
+    onAdd: () -> Unit,
     onRefresh: () -> Unit,
     onError: (String) -> Unit,
 ) {
     var tab by remember { mutableStateOf(FilmTab.SEEN) }
     var favoritesOnly by remember { mutableStateOf(false) }
     var search by remember { mutableStateOf("") }
-    var collections by remember { mutableStateOf<Map<Long, Collection>>(emptyMap()) }
+    var collections by remember(dataEpoch) { mutableStateOf<Map<Long, Collection>>(emptyMap()) }
     var loadingCollections by remember { mutableStateOf(false) }
     var tmdbResults by remember { mutableStateOf<SearchPage?>(null) }
     var searchedQuery by remember { mutableStateOf("") }
@@ -85,7 +87,7 @@ fun FilmsView(
     val scope = rememberCoroutineScope()
 
     val collectionIds = films.mapNotNull { it.film.collection?.id }.distinct()
-    LaunchedEffect(collectionIds, tab) {
+    LaunchedEffect(collectionIds, tab, dataEpoch) {
         if (tab != FilmTab.COLLECTIONS) return@LaunchedEffect
         val missing = collectionIds.filter { it !in collections }
         if (missing.isEmpty()) return@LaunchedEffect
@@ -349,6 +351,10 @@ fun FilmsView(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Spacer(Modifier.height(8.dp))
+                            TextButton(onClick = onAdd) {
+                                Text("Add your first film")
+                            }
                         }
                     }
                 }

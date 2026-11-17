@@ -10,3 +10,8 @@ export function certificationIcon(region: string, rating: string): string | null
   const file = values[rating.trim().toUpperCase()];
   return file ? OFFICIAL + encodeURIComponent(file) : null;
 }
+
+/** The country flag for a rating board's region code (`US` → `us.svg`). */
+export function boardFlagUrl(region: string): string {
+  return "/cert-icons/flags/" + region.toLowerCase() + ".svg";
+}

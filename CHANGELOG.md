@@ -40,6 +40,13 @@ example `## [0.1.0] - 2026-11-15`.
 - Settings licenses/credits section and TMDB attribution.
 - Film-strip icon for the Films navigation item.
 - `CHANGELOG.md` for release-to-release change tracking.
+- Stats now uses every field a viewing carries: rating counts, genres, total
+  runtime, and first/last viewing dates, plus weekday and hour-of-day
+  breakdowns resolved in each log's own time zone.
+- Ratings-by-thumbs sorting on the Logs list (up, then down, then unrated,
+  with recency as the tie-break).
+- Flag and name for every rating board in Settings, and an export/import
+  status line.
 
 ### Changed
 
@@ -50,14 +57,25 @@ example `## [0.1.0] - 2026-11-15`.
 - Android system back returns to the Logs screen before exiting the app.
 - Rating-board icons now use bundled official symbols; the settings board still
   chooses which certification is shown in lists and film pages.
+- Desktop and Android now show the same content, actions, strings, and computed
+  values on every screen; only native chrome, widget type, and layout differ.
+- The film page renders only the selected board's certification, at a larger
+  size for legibility, instead of every stored board.
+- Viewing times on Android include the short time-zone name, matching desktop.
+- Android's document picker accepts any file type for import, so a desktop
+  export synced through Drive or Downloads can be chosen.
+- Importing a database invalidates each app's cached film and collection data.
 
 ### Removed
 
 - Film tags from the UI, Rust API, FFI surface, and database schema.
+- The duplicate in-content back link on Android's film screen; the app bar's
+  back arrow is the single back affordance.
 
 ### Fixed
 
 - Invalid database imports no longer replace the live database.
+- Exporting over the live database path is rejected instead of deleting it.
 - Deleting a viewing correctly recounts the remaining viewings as rewatches or
   first viewings.
 - Format summaries and legality checks no longer drift between desktop and

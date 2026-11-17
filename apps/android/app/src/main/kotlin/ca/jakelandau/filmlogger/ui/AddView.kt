@@ -210,7 +210,7 @@ fun AddView(
         }
         val parsed = TimeUtils.fromLocalInput(watchedAtInput, TimeUtils.zone(timezone))
         if (parsed.isEmpty()) {
-            onError("Invalid date or time zone, use yyyy-MM-dd HH:mm")
+            onError("Invalid watched-at date or time zone")
             return
         }
         val f = format ?: FormatText.build(FormatParts.forVenue(venue))
@@ -255,7 +255,7 @@ fun AddView(
                     value = query,
                     onValueChange = { query = it },
                     modifier = Modifier.weight(1f),
-                    label = { Text("Film title") },
+                    label = { Text("Search films") },
                 )
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = { doSearch() }, enabled = !busy) { Text("Search") }
@@ -266,10 +266,10 @@ fun AddView(
                     value = imdbQuery,
                     onValueChange = { imdbQuery = it },
                     modifier = Modifier.weight(1f),
-                    label = { Text("IMDB id (tt1234567)") },
+                    label = { Text("IMDB id (tt…)") },
                 )
                 Spacer(Modifier.width(8.dp))
-                Button(onClick = { doFind() }, enabled = !busy) { Text("Find") }
+                Button(onClick = { doFind() }, enabled = !busy) { Text("Find by IMDB") }
             }
             Spacer(Modifier.height(12.dp))
             if (busy) {
@@ -288,14 +288,22 @@ fun AddView(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Spacer(Modifier.height(8.dp))
-                ResultsList(
-                    page,
-                    busy = busy,
-                    onSelect = { r ->
-                        selected = SelectedFilm.fromSummary(r)
-                        stage = AddStage.CONFIRM
-                    },
-                )
+                if (results != null && page.results.isEmpty()) {
+                    Text(
+                        "No TMDB results.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    ResultsList(
+                        page,
+                        busy = busy,
+                        onSelect = { r ->
+                            selected = SelectedFilm.fromSummary(r)
+                            stage = AddStage.CONFIRM
+                        },
+                    )
+                }
                 if (page.page < page.totalPages) {
                     OutlinedButton(
                         onClick = { if (results == null) loadMorePopular() else loadMore() },
@@ -471,7 +479,7 @@ private fun FormatCard(
             Spacer(Modifier.height(16.dp))
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("‹ Back") }
+                TextButton(onClick = onBack) { Text("Back") }
                 Spacer(Modifier.weight(1f))
                 Button(onClick = onNext, enabled = !busy) { Text("Next") }
             }
@@ -545,7 +553,7 @@ private fun DetailCard(
             Spacer(Modifier.height(16.dp))
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("‹ Back") }
+                TextButton(onClick = onBack) { Text("Back") }
                 Spacer(Modifier.weight(1f))
                 Button(
                     onClick = onLog,
@@ -614,9 +622,9 @@ private fun ConfirmCard(
             }
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("‹ Back") }
+                TextButton(onClick = onBack) { Text("Back") }
                 Spacer(Modifier.weight(1f))
-                Button(onClick = onConfirm, enabled = !busy) { Text("Confirm") }
+                Button(onClick = onConfirm, enabled = !busy) { Text("Confirm film") }
             }
         }
     }

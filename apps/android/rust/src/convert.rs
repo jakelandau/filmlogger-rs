@@ -7,7 +7,8 @@ use crate::types::{
     CountEntry, Dci, Film, FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, FilmViewings,
     Format, FormatCatalog, FormatGroup, FormatLegality, FormatOption, Genre, HomeFormatLegality,
     HomeMedium, Imax, LoggerError, Movie, MovieSummary, NewLogDetails, Projection, Rating,
-    RatingBoard, ScreenClass, SearchPage, Settings, Stats, Venue, VenueCounts, WatchLog, YearCount,
+    RatingBoard, RatingCounts, ScreenClass, SearchPage, Settings, Stats, Venue, VenueCounts,
+    WatchLog, YearCount,
 };
 use film_logger as core;
 
@@ -526,6 +527,25 @@ impl From<core::Stats> for Stats {
             viewings_by_screen: count_entries(s.viewings_by_screen),
             viewings_by_medium: count_entries(s.viewings_by_medium),
             viewings_by_flag: count_entries(s.viewings_by_flag),
+            ratings: s.ratings.into(),
+            viewings_by_genre: count_entries(s.viewings_by_genre),
+            #[allow(clippy::cast_possible_truncation)]
+            total_runtime_minutes: u32::try_from(s.total_runtime_minutes).unwrap_or(u32::MAX),
+            first_viewed_at: s.first_viewed_at.map(|t| t.to_rfc3339()),
+            last_viewed_at: s.last_viewed_at.map(|t| t.to_rfc3339()),
+        }
+    }
+}
+
+impl From<core::RatingCounts> for RatingCounts {
+    fn from(r: core::RatingCounts) -> Self {
+        Self {
+            #[allow(clippy::cast_possible_truncation)]
+            up: r.up as u32,
+            #[allow(clippy::cast_possible_truncation)]
+            down: r.down as u32,
+            #[allow(clippy::cast_possible_truncation)]
+            unrated: r.unrated as u32,
         }
     }
 }
@@ -807,6 +827,7 @@ impl From<core::Error> for LoggerError {
             },
             core::Error::InvalidWatchCount { count } => LoggerError::InvalidWatchCount { count },
             core::Error::InvalidImport { detail } => LoggerError::InvalidImport { detail },
+            core::Error::InvalidExport { detail } => LoggerError::InvalidExport { detail },
             core::Error::NoTmdbId { film_id } => LoggerError::NoTmdbId {
                 film_id: film_id.into(),
             },

@@ -19,7 +19,7 @@ use rusqlite::backup::Backup;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::Serialize;
 
-use crate::domain::{FilmId, FilmListEntry, FilmMetadata, Format, Settings, Venue, WatchLog};
+use crate::domain::{FilmId, FilmListEntry, FilmMetadata, Format, Genre, Rating, Settings, Venue, WatchLog};
 use crate::error::Error;
 
 /// The `settings` table row key for the [`Settings`] document.
@@ -330,13 +330,19 @@ impl Store {
     /// stored document cannot be deserialized.
     pub fn stats(&self) -> Result<Stats, Error> {
         let logs = self.list()?;
+        let film_inputs = self.film_aggregate_inputs()?;
         let mut by_venue = VenueCounts::default();
+        let mut ratings = RatingCounts::default();
         let mut by_year = BTreeMap::new();
         let mut by_month = BTreeMap::new();
         let mut by_family = BTreeMap::new();
         let mut by_screen = BTreeMap::new();
         let mut by_medium = BTreeMap::new();
         let mut by_flag = BTreeMap::new();
+        let mut by_genre: BTreeMap<String, usize> = BTreeMap::new();
+        let mut total_runtime_minutes: u64 = 0;
+        let mut first_viewed_at: Option<DateTime<Utc>> = None;
+        let mut last_viewed_at: Option<DateTime<Utc>> = None;
         let mut per_film: HashMap<FilmId, (String, usize)> = HashMap::new();
         let mut rewatches = 0;
         for log in &logs {
@@ -344,6 +350,21 @@ impl Store {
                 Venue::Theatre => by_venue.theatre += 1,
                 Venue::Home => by_venue.home += 1,
             }
+            match log.rating {
+                Some(Rating::Up) => ratings.up += 1,
+                Some(Rating::Down) => ratings.down += 1,
+                None => ratings.unrated += 1,
+            }
+            if let Some((genres, runtime)) = film_inputs.get(&log.film_id) {
+                for name in genres {
+                    *by_genre.entry(name.clone()).or_default() += 1;
+                }
+                total_runtime_minutes += runtime;
+            }
+            first_viewed_at = Some(
+                first_viewed_at.map_or(log.watched_at, |first| first.min(log.watched_at)),
+            );
+            last_viewed_at = Some(last_viewed_at.map_or(log.watched_at, |last| last.max(log.watched_at)));
             *by_year.entry(log.watched_at.year()).or_default() += 1;
             *by_month
                 .entry(format!(
@@ -352,39 +373,13 @@ impl Store {
                     log.watched_at.month()
                 ))
                 .or_default() += 1;
-            match &log.format {
-                Some(Format::Theatre {
-                    projection,
-                    screen,
-                    three_d,
-                    hfr,
-                    dbox,
-                }) => {
-                    *by_family
-                        .entry(projection.family_key().to_string())
-                        .or_default() += 1;
-                    *by_screen.entry(screen.key().to_string()).or_default() += 1;
-                    for (key, on) in [("three_d", *three_d), ("hfr", *hfr), ("dbox", *dbox)] {
-                        if on {
-                            *by_flag.entry(key.to_string()).or_default() += 1;
-                        }
-                    }
-                }
-                Some(Format::Home {
-                    medium,
-                    three_d,
-                    hfr,
-                }) => {
-                    *by_family.entry("home".to_string()).or_default() += 1;
-                    *by_medium.entry(medium.key().to_string()).or_default() += 1;
-                    for (key, on) in [("three_d", *three_d), ("hfr", *hfr)] {
-                        if on {
-                            *by_flag.entry(key.to_string()).or_default() += 1;
-                        }
-                    }
-                }
-                None => {}
-            }
+            count_format(
+                log.format.as_ref(),
+                &mut by_family,
+                &mut by_screen,
+                &mut by_medium,
+                &mut by_flag,
+            );
             if log.rewatch {
                 rewatches += 1;
             }
@@ -410,9 +405,43 @@ impl Store {
             viewings_by_screen: by_screen,
             viewings_by_medium: by_medium,
             viewings_by_flag: by_flag,
+            ratings,
+            viewings_by_genre: by_genre,
+            total_runtime_minutes,
+            first_viewed_at,
+            last_viewed_at,
             rewatches,
             top_films,
         })
+    }
+
+    /// The per-film inputs [`Store::stats`] needs: each stored film's genre
+    /// names and its runtime in minutes (0 when unknown).
+    fn film_aggregate_inputs(&self) -> Result<HashMap<FilmId, (Vec<String>, u64)>, Error> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT film_id, genres, runtime_minutes FROM films")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+            ))
+        })?;
+        let mut inputs = HashMap::new();
+        for row in rows {
+            let (key, genres, runtime) = row?;
+            let Ok(film_id) = FilmId::from_key(&key) else {
+                continue;
+            };
+            let genres: Vec<Genre> = serde_json::from_str(&genres)?;
+            let runtime = runtime.map_or(0, |m| u64::try_from(m.max(0)).unwrap_or(0));
+            inputs.insert(
+                film_id,
+                (genres.into_iter().map(|g| g.name).collect(), runtime),
+            );
+        }
+        Ok(inputs)
     }
 
     /// The database file path this store is open on (`:memory:` for
@@ -472,10 +501,18 @@ impl Store {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Io`] if the destination cannot be removed, otherwise
-    /// [`Error::Sqlite`].
+    /// Returns [`Error::InvalidExport`] if `dest` resolves to the live
+    /// database, [`Error::Io`] if the destination cannot be removed,
+    /// otherwise [`Error::Sqlite`].
     pub fn export_to(&self, dest: impl AsRef<Path>) -> Result<(), Error> {
         let dest = dest.as_ref();
+        if let (Ok(a), Ok(b)) = (dest.canonicalize(), self.path().canonicalize()) {
+            if a == b {
+                return Err(Error::InvalidExport {
+                    detail: "destination is the live database".to_owned(),
+                });
+            }
+        }
         if dest.exists() {
             std::fs::remove_file(dest)?;
         }
@@ -964,6 +1001,50 @@ fn insert_film_row(
     Ok(conn.execute(&sql, rusqlite::params_from_iter(values))?)
 }
 
+/// Add one log's format to the family, auditorium, medium, and flag
+/// breakdowns. Logs with no stored format contribute nothing.
+fn count_format(
+    format: Option<&Format>,
+    by_family: &mut BTreeMap<String, usize>,
+    by_screen: &mut BTreeMap<String, usize>,
+    by_medium: &mut BTreeMap<String, usize>,
+    by_flag: &mut BTreeMap<String, usize>,
+) {
+    match format {
+        Some(Format::Theatre {
+            projection,
+            screen,
+            three_d,
+            hfr,
+            dbox,
+        }) => {
+            *by_family
+                .entry(projection.family_key().to_string())
+                .or_default() += 1;
+            *by_screen.entry(screen.key().to_string()).or_default() += 1;
+            for (key, on) in [("three_d", *three_d), ("hfr", *hfr), ("dbox", *dbox)] {
+                if on {
+                    *by_flag.entry(key.to_string()).or_default() += 1;
+                }
+            }
+        }
+        Some(Format::Home {
+            medium,
+            three_d,
+            hfr,
+        }) => {
+            *by_family.entry("home".to_string()).or_default() += 1;
+            *by_medium.entry(medium.key().to_string()).or_default() += 1;
+            for (key, on) in [("three_d", *three_d), ("hfr", *hfr)] {
+                if on {
+                    *by_flag.entry(key.to_string()).or_default() += 1;
+                }
+            }
+        }
+        None => {}
+    }
+}
+
 /// Insert a film row or update its TMDB-sourced columns, preserving the
 /// user-owned columns and `created_at`. Returns the affected row count.
 fn upsert_film_row(conn: &Connection, film: &FilmMetadata) -> Result<usize, Error> {
@@ -1022,6 +1103,18 @@ pub struct Stats {
     pub viewings_by_medium: BTreeMap<String, usize>,
     /// Viewings per presentation flag: `three_d`, `hfr`, or `dbox`.
     pub viewings_by_flag: BTreeMap<String, usize>,
+    /// Viewings per rating (up, down, unrated; always sums to
+    /// [`Stats::total_viewings`]).
+    pub ratings: RatingCounts,
+    /// Viewings per genre name of the logged film, ascending.
+    pub viewings_by_genre: BTreeMap<String, usize>,
+    /// Total runtime of every viewing, in minutes (0 when no runtime is
+    /// known).
+    pub total_runtime_minutes: u64,
+    /// The earliest `watched_at` across all logs, if any.
+    pub first_viewed_at: Option<DateTime<Utc>>,
+    /// The latest `watched_at` across all logs, if any.
+    pub last_viewed_at: Option<DateTime<Utc>>,
     /// Viewings flagged as a rewatch.
     pub rewatches: usize,
     /// Top films by viewing count, descending (title as tie-break).
@@ -1053,6 +1146,17 @@ pub struct VenueCounts {
     pub home: usize,
 }
 
+/// Viewings broken down by rating.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct RatingCounts {
+    /// Viewings rated thumbs up.
+    pub up: usize,
+    /// Viewings rated thumbs down.
+    pub down: usize,
+    /// Viewings left unrated.
+    pub unrated: usize,
+}
+
 /// A single film's viewing count, for ranked reports.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FilmViewings {
@@ -1066,11 +1170,13 @@ pub struct FilmViewings {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{FilmViewings, Store, VenueCounts};
+    use super::{FilmViewings, RatingCounts, Store, VenueCounts};
     use crate::domain::{
-        Dci, FilmId, Format, HomeMedium, Projection, ScreenClass, Venue, WatchLog,
+        Dci, FilmId, FilmMetadata, Format, Genre, HomeMedium, Projection, Rating, ScreenClass,
+        Venue, WatchLog,
     };
-    use chrono::NaiveDate;
+    use crate::error::Error;
+    use chrono::{NaiveDate, Utc};
 
     /// A valid log for tests: a [`WatchLog::now`] with a format attached,
     /// matching the venue.
@@ -1146,9 +1252,121 @@ mod tests {
         assert_eq!(stats.distinct_films, 0);
         assert_eq!(stats.viewings_by_venue, VenueCounts::default());
         assert_eq!(stats.viewings_by_year, BTreeMap::new());
+        assert_eq!(stats.ratings, RatingCounts::default());
+        assert_eq!(stats.viewings_by_genre, BTreeMap::new());
+        assert_eq!(stats.total_runtime_minutes, 0);
+        assert_eq!(stats.first_viewed_at, None);
+        assert_eq!(stats.last_viewed_at, None);
         assert_eq!(stats.rewatches, 0);
         assert_eq!(stats.rewatch_rate(), 0.0);
         assert_eq!(stats.top_films, Vec::new());
+    }
+
+    /// A stored film row with genres and a runtime, for stats tests.
+    fn test_film(film_id: FilmId, title: &str, genres: &[&str], runtime: i32) -> FilmMetadata {
+        let mut film = FilmMetadata::from_log(&test_log(film_id, title, Venue::Home));
+        film.genres = genres
+            .iter()
+            .enumerate()
+            .map(|(id, name)| Genre {
+                id: i32::try_from(id).unwrap(),
+                name: (*name).to_owned(),
+            })
+            .collect();
+        film.runtime_minutes = Some(runtime);
+        film
+    }
+
+    #[test]
+    fn stats_include_ratings_genres_runtime_and_bounds() {
+        let store = Store::open_in_memory().unwrap();
+        let a = FilmId::Imdb("tt0000001".into());
+        let b = FilmId::Imdb("tt0000002".into());
+        store
+            .upsert_film(&test_film(a.clone(), "Film A", &["Drama", "Thriller"], 100))
+            .unwrap();
+        store
+            .upsert_film(&test_film(b.clone(), "Film B", &["Drama"], 120))
+            .unwrap();
+        let insert = |mut log: WatchLog, at: chrono::DateTime<Utc>, rating: Option<Rating>| {
+            log.watched_at = at;
+            log.rating = rating;
+            store.insert(log).unwrap();
+        };
+        let at = |y: i32| {
+            NaiveDate::from_ymd_opt(y, 6, 1)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc()
+        };
+        insert(
+            test_log(a.clone(), "Film A", Venue::Theatre),
+            at(2020),
+            Some(Rating::Up),
+        );
+        insert(test_log(a.clone(), "Film A", Venue::Home), at(2021), None);
+        insert(
+            test_log(b.clone(), "Film B", Venue::Home),
+            at(2022),
+            Some(Rating::Down),
+        );
+
+        let stats = store.stats().unwrap();
+        assert_eq!(
+            stats.ratings,
+            RatingCounts {
+                up: 1,
+                down: 1,
+                unrated: 1
+            }
+        );
+        assert_eq!(stats.total_runtime_minutes, 320);
+        assert_eq!(stats.first_viewed_at, Some(at(2020)));
+        assert_eq!(stats.last_viewed_at, Some(at(2022)));
+        let mut by_genre = BTreeMap::new();
+        by_genre.insert("Drama".to_owned(), 3);
+        by_genre.insert("Thriller".to_owned(), 2);
+        assert_eq!(stats.viewings_by_genre, by_genre);
+        assert_eq!(
+            stats.top_films,
+            vec![
+                FilmViewings {
+                    title: "Film A".into(),
+                    count: 2
+                },
+                FilmViewings {
+                    title: "Film B".into(),
+                    count: 1
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn export_refuses_live_database_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("db.sqlite");
+        let store = Store::open(&db).unwrap();
+        store
+            .insert(test_log(
+                FilmId::Imdb("tt0137523".into()),
+                "Fight Club",
+                Venue::Theatre,
+            ))
+            .unwrap();
+
+        match store.export_to(&db) {
+            Err(Error::InvalidExport { detail }) => {
+                assert_eq!(detail, "destination is the live database");
+            }
+            other => panic!("expected InvalidExport, got {other:?}"),
+        }
+
+        let export = dir.path().join("export.sqlite");
+        store.export_to(&export).unwrap();
+        let reopened = Store::open(&export).unwrap();
+        assert_eq!(reopened.list().unwrap().len(), 1);
     }
 
     #[test]

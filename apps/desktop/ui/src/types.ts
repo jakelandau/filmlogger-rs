@@ -81,6 +81,11 @@ export interface Stats {
   viewings_by_screen: Record<string, number>;
   viewings_by_medium: Record<string, number>;
   viewings_by_flag: Record<string, number>;
+  ratings: { up: number; down: number; unrated: number };
+  viewings_by_genre: Record<string, number>;
+  total_runtime_minutes: number;
+  first_viewed_at: string | null;
+  last_viewed_at: string | null;
   rewatches: number;
   top_films: FilmViewings[];
 }

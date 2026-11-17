@@ -60,6 +60,7 @@ export const CREDIT_GROUPS: CreditGroup[] = [
       { name: "tokio", license: "MIT" },
       { name: "wiremock", license: "MIT OR Apache-2.0" },
       { name: "tempfile", license: "MIT OR Apache-2.0" },
+      { name: "JUnit 4 (test-only)", license: "EPL-1.0" },
     ],
   },
   {

@@ -2,7 +2,10 @@
 //! cross-instance behaviour (migration, export/import) is under test.
 
 use filmlogger_rs::domain::{Dci, FilmId, Format, HomeMedium, Projection, ScreenClass};
-use filmlogger_rs::{Error, FilmMetadata, Store, Venue, WatchLog};
+use filmlogger_rs::{
+    CastMember, Certifications, CollectionRef, Error, FilmMetadata, FilmViewings, Genre, Store,
+    Venue, WatchLog,
+};
 use rusqlite::Connection;
 
 /// A valid log for tests: a [`WatchLog::now`] with a format attached,
@@ -170,6 +173,21 @@ fn update_recomputes_chronological_rewatch_and_watch_count() {
 }
 
 #[test]
+fn insert_ignores_supplied_derived_fields() {
+    let store = Store::open_in_memory().unwrap();
+    let mut log = test_log(
+        FilmId::Imdb("tt0137523".into()),
+        "Fight Club",
+        Venue::Theatre,
+    );
+    log.rewatch = true;
+    log.watch_count = Some(0);
+    let stored = store.insert(log).unwrap();
+    assert!(!stored.rewatch);
+    assert_eq!(stored.watch_count, Some(1));
+}
+
+#[test]
 fn update_ignores_supplied_derived_fields() {
     let store = Store::open_in_memory().unwrap();
     let stored = store
@@ -181,10 +199,104 @@ fn update_ignores_supplied_derived_fields() {
         .unwrap();
     let mut tampered = stored.clone();
     tampered.rewatch = true;
-    tampered.watch_count = Some(99);
+    tampered.watch_count = Some(0);
     let updated = store.update(tampered).unwrap();
     assert!(!updated.rewatch);
     assert_eq!(updated.watch_count, Some(1));
+}
+
+#[test]
+fn film_roundtrip_preserves_every_field() {
+    let store = Store::open_in_memory().unwrap();
+    let film = FilmMetadata {
+        film_id: FilmId::Imdb("tt0137523".into()),
+        tmdb_id: Some(550),
+        imdb_id: Some("tt0137523".into()),
+        title: "Fight Club".into(),
+        original_title: Some("Fight Club".into()),
+        release_date: Some("1999-10-15".into()),
+        release_year: Some(1999),
+        runtime_minutes: Some(139),
+        overview: Some("An insomniac office worker.".into()),
+        tagline: Some("Mischief. Mayhem. Soap.".into()),
+        original_language: Some("en".into()),
+        poster_path: Some("/poster.jpg".into()),
+        backdrop_path: Some("/backdrop.jpg".into()),
+        vote_average: Some(8.4),
+        vote_count: Some(30_000),
+        popularity: Some(61.4),
+        adult: true,
+        genres: vec![Genre {
+            id: 18,
+            name: "Drama".into(),
+        }],
+        cast: vec![CastMember {
+            id: 819,
+            name: "Edward Norton".into(),
+            character: Some("Narrator".into()),
+            order: 0,
+        }],
+        certifications: Some(Certifications::new([("us".to_owned(), "R".to_owned())])),
+        collection: Some(CollectionRef {
+            id: 1,
+            name: "Fight Club Collection".into(),
+            poster_path: Some("/collection.jpg".into()),
+        }),
+        favorite: true,
+        watchlisted: true,
+        metadata_refreshed_at: Some(at("2024-01-02T03:04:05Z")),
+    };
+    store.upsert_film(&film).unwrap();
+    assert_eq!(store.get_film(&film.film_id).unwrap().unwrap(), film);
+}
+
+#[test]
+fn stats_use_stored_film_metadata() {
+    let store = Store::open_in_memory().unwrap();
+    let film_id = FilmId::Imdb("tt0000001".into());
+    store
+        .insert(test_log(film_id.clone(), "Old title", Venue::Home))
+        .unwrap();
+    let mut film = store.get_film(&film_id).unwrap().unwrap();
+    film.title = "New title".into();
+    film.genres = vec![Genre {
+        id: 18,
+        name: "Drama".into(),
+    }];
+    film.runtime_minutes = Some(120);
+    store.upsert_film(&film).unwrap();
+
+    let stats = store.stats().unwrap();
+    assert_eq!(
+        stats.top_films,
+        vec![FilmViewings {
+            title: "New title".into(),
+            count: 1
+        }]
+    );
+    assert_eq!(stats.viewings_by_genre.get("Drama"), Some(&1));
+    assert_eq!(stats.total_runtime_minutes, 120);
+}
+
+#[test]
+fn stats_recompute_rewatch_after_delete() {
+    let store = Store::open_in_memory().unwrap();
+    let film_id = FilmId::Imdb("tt0137523".into());
+    let mut first = test_log(film_id.clone(), "Fight Club", Venue::Theatre);
+    first.watched_at = at("2020-01-01T12:00:00Z");
+    let first = store.insert(first).unwrap();
+    let mut second = test_log(film_id, "Fight Club", Venue::Theatre);
+    second.watched_at = at("2021-01-01T12:00:00Z");
+    let second = store.insert(second).unwrap();
+    assert_eq!(store.stats().unwrap().rewatches, 1);
+
+    // Deleting the earlier viewing leaves the later document carrying the
+    // now-stale `rewatch` projection; stats must recount from `watch_log`.
+    assert!(store.delete(first.id).unwrap());
+    assert_eq!(store.stats().unwrap().rewatches, 0);
+    let remaining = store.get(second.id).unwrap().unwrap();
+    assert!(!remaining.rewatch);
+    assert_eq!(remaining.watch_count, Some(1));
 }
 
 #[test]

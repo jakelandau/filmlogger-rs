@@ -838,12 +838,37 @@ impl FilmMetadata {
 /// One film in the library list, with its viewing summary.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FilmListEntry {
-    /// The film metadata.
-    pub film: FilmMetadata,
+    /// The film, as the library list renders it.
+    pub film: LibraryFilm,
     /// Number of stored viewings.
     pub viewings: usize,
     /// The most recent viewing instant, if any.
     pub last_watched_at: Option<DateTime<Utc>>,
+}
+
+/// The Films-tab and collection-card projection of a stored film.
+///
+/// It carries only the columns those views render; [`FilmMetadata`] (overview,
+/// cast, genres, certifications, …) is the full-metadata path used by a single
+/// film's page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LibraryFilm {
+    /// Canonical film identifier.
+    pub film_id: FilmId,
+    /// The TMDB numeric id, if known.
+    pub tmdb_id: Option<i64>,
+    /// The title.
+    pub title: String,
+    /// The release year, if known.
+    pub release_year: Option<i32>,
+    /// The poster path, if known.
+    pub poster_path: Option<String>,
+    /// The collection the film belongs to, if any.
+    pub collection: Option<CollectionRef>,
+    /// Whether the user marked the film a favorite.
+    pub favorite: bool,
+    /// Whether the user put the film on their watchlist.
+    pub watchlisted: bool,
 }
 
 /// The viewing statistics for a single film.

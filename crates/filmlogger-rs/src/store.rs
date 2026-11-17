@@ -20,7 +20,8 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::Serialize;
 
 use crate::domain::{
-    FilmId, FilmListEntry, FilmMetadata, Format, Genre, Rating, Settings, Venue, WatchLog,
+    Certifications, FilmId, FilmListEntry, FilmMetadata, Format, Genre, LibraryFilm, Rating,
+    Settings, Venue, WatchLog,
 };
 use crate::error::Error;
 
@@ -36,14 +37,6 @@ const FILM_COLUMNS: &str = "film_id, tmdb_id, imdb_id, title, original_title, \
      original_language, poster_path, backdrop_path, vote_average, vote_count, \
      popularity, adult, genres, \"cast\", certifications, collection, \
      favorite, watchlisted, metadata_refreshed_at";
-
-/// [`FILM_COLUMNS`] qualified with the `f` alias (for joins).
-const FILM_COLUMNS_F: &str = "f.film_id, f.tmdb_id, f.imdb_id, f.title, \
-     f.original_title, f.release_date, f.release_year, f.runtime_minutes, \
-     f.overview, f.tagline, f.original_language, f.poster_path, \
-     f.backdrop_path, f.vote_average, f.vote_count, f.popularity, f.adult, \
-     f.genres, f.\"cast\", f.certifications, f.collection, f.favorite, \
-     f.watchlisted, f.metadata_refreshed_at";
 
 /// SQLite-backed watch log store.
 #[derive(Debug)]
@@ -89,9 +82,11 @@ impl Store {
     /// Returns [`Error::Sqlite`] on a write failure, [`Error::Serde`] if the
     /// log cannot be serialized, or a validation error if the log is invalid.
     pub fn insert(&self, mut log: WatchLog) -> Result<WatchLog, Error> {
-        log.validate()?;
         log.id = 0;
+        log.rewatch = false;
+        log.watch_count = None;
         log.set_derived();
+        log.validate()?;
         let watched_at_ms = log.watched_at.timestamp_millis();
         let tx = self.conn.unchecked_transaction()?;
         insert_film_row(
@@ -132,7 +127,9 @@ impl Store {
         let Some(doc) = doc else {
             return Ok(None);
         };
-        let logs = self.hydrate(vec![decode(id, &doc)?])?;
+        let log = decode(id, &doc)?;
+        let film_id = log.film_id.clone();
+        let logs = self.hydrate(vec![log], Some(&film_id))?;
         Ok(logs.into_iter().next())
     }
 
@@ -154,7 +151,7 @@ impl Store {
             let (id, doc) = row?;
             logs.push(decode(id, &doc)?);
         }
-        self.hydrate(logs)
+        self.hydrate(logs, None)
     }
 
     /// The viewings of one film, most recent first.
@@ -175,7 +172,7 @@ impl Store {
             let (id, doc) = row?;
             logs.push(decode(id, &doc)?);
         }
-        self.hydrate(logs)
+        self.hydrate(logs, Some(film_id))
     }
 
     /// Delete a log by its row id. Returns whether a row was deleted.
@@ -201,11 +198,22 @@ impl Store {
     /// [`Error::Sqlite`] on a write failure, or a validation error if the
     /// log is invalid.
     pub fn update(&self, mut log: WatchLog) -> Result<WatchLog, Error> {
-        if self.get(log.id)?.is_none() {
+        let exists = self
+            .conn
+            .query_row(
+                "SELECT 1 FROM watch_log WHERE id = ?1",
+                params![log.id],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if !exists {
             return Err(Error::LogNotFound { id: log.id });
         }
-        log.validate()?;
+        log.rewatch = false;
+        log.watch_count = None;
         log.set_derived();
+        log.validate()?;
         let watched_at_ms = log.watched_at.timestamp_millis();
         let doc = serde_json::to_string(&log)?;
         let tx = self.conn.unchecked_transaction()?;
@@ -266,23 +274,25 @@ impl Store {
     /// Returns [`Error::Sqlite`] on a read failure, or [`Error::Serde`] if a
     /// JSON column cannot be deserialized.
     pub fn list_films(&self) -> Result<Vec<FilmListEntry>, Error> {
-        let mut stmt = self.conn.prepare(&format!(
-            "SELECT {FILM_COLUMNS_F}, COUNT(w.id), MAX(w.watched_at_ms) \
+        let mut stmt = self.conn.prepare(
+            "SELECT f.film_id, f.tmdb_id, f.title, f.release_year, f.poster_path, \
+                    f.collection, f.favorite, f.watchlisted, \
+                    COUNT(w.id), MAX(w.watched_at_ms) \
              FROM films f LEFT JOIN watch_log w ON w.film_id = f.film_id \
-             GROUP BY f.film_id ORDER BY f.title COLLATE NOCASE"
-        ))?;
+             GROUP BY f.film_id ORDER BY f.title COLLATE NOCASE",
+        )?;
         let rows = stmt.query_map([], |row| {
             Ok((
-                RawFilmRow::from_row(row)?,
-                row.get::<_, i64>(FILM_COLUMN_COUNT)?,
-                row.get::<_, Option<i64>>(FILM_COLUMN_COUNT + 1)?,
+                RawLibraryFilm::from_row(row)?,
+                row.get::<_, i64>(LIBRARY_FILM_COLUMN_COUNT)?,
+                row.get::<_, Option<i64>>(LIBRARY_FILM_COLUMN_COUNT + 1)?,
             ))
         })?;
         let mut films = Vec::new();
         for row in rows {
             let (raw, viewings, last) = row?;
             films.push(FilmListEntry {
-                film: film_from_raw(raw)?,
+                film: library_film_from_raw(raw)?,
                 viewings: usize::try_from(viewings).unwrap_or(usize::MAX),
                 last_watched_at: last.and_then(DateTime::from_timestamp_millis),
             });
@@ -331,8 +341,10 @@ impl Store {
     /// Returns [`Error::Sqlite`] on a read failure, or [`Error::Serde`] if a
     /// stored document cannot be deserialized.
     pub fn stats(&self) -> Result<Stats, Error> {
-        let logs = self.list()?;
-        let film_inputs = self.film_aggregate_inputs()?;
+        let films = self.film_aggregates()?;
+        let rewatches = self.rewatch_count()?;
+        let mut stmt = self.conn.prepare("SELECT id, doc FROM watch_log")?;
+        let mut rows = stmt.query([])?;
         let mut by_venue = VenueCounts::default();
         let mut ratings = RatingCounts::default();
         let mut by_year = BTreeMap::new();
@@ -346,8 +358,12 @@ impl Store {
         let mut first_viewed_at: Option<DateTime<Utc>> = None;
         let mut last_viewed_at: Option<DateTime<Utc>> = None;
         let mut per_film: HashMap<FilmId, (String, usize)> = HashMap::new();
-        let mut rewatches = 0;
-        for log in &logs {
+        let mut total_viewings = 0;
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let doc: String = row.get(1)?;
+            let log = decode(id, &doc)?;
+            total_viewings += 1;
             match log.venue {
                 Venue::Theatre => by_venue.theatre += 1,
                 Venue::Home => by_venue.home += 1,
@@ -357,11 +373,11 @@ impl Store {
                 Some(Rating::Down) => ratings.down += 1,
                 None => ratings.unrated += 1,
             }
-            if let Some((genres, runtime)) = film_inputs.get(&log.film_id) {
-                for name in genres {
+            if let Some(film) = films.get(&log.film_id) {
+                for name in &film.genres {
                     *by_genre.entry(name.clone()).or_default() += 1;
                 }
-                total_runtime_minutes += runtime;
+                total_runtime_minutes += film.runtime_minutes;
             }
             first_viewed_at =
                 Some(first_viewed_at.map_or(log.watched_at, |first| first.min(log.watched_at)));
@@ -382,15 +398,14 @@ impl Store {
                 &mut by_medium,
                 &mut by_flag,
             );
-            if log.rewatch {
-                rewatches += 1;
-            }
+            let title = films
+                .get(&log.film_id)
+                .map_or_else(|| log.title.clone(), |film| film.title.clone());
             let entry = per_film
                 .entry(log.film_id.clone())
-                .or_insert_with(|| (log.title.clone(), 0));
+                .or_insert_with(|| (title, 0));
             entry.1 += 1;
         }
-        let total_viewings = logs.len();
         let distinct_films = per_film.len();
         let mut top_films: Vec<FilmViewings> = per_film
             .into_iter()
@@ -417,33 +432,50 @@ impl Store {
         })
     }
 
-    /// The per-film inputs [`Store::stats`] needs: each stored film's genre
-    /// names and its runtime in minutes (0 when unknown).
-    fn film_aggregate_inputs(&self) -> Result<HashMap<FilmId, (Vec<String>, u64)>, Error> {
+    /// The per-film inputs [`Store::stats`] needs: each stored film's title,
+    /// genre names, and runtime in minutes (0 when unknown).
+    fn film_aggregates(&self) -> Result<HashMap<FilmId, FilmAggregate>, Error> {
         let mut stmt = self
             .conn
-            .prepare("SELECT film_id, genres, runtime_minutes FROM films")?;
+            .prepare("SELECT film_id, title, genres, runtime_minutes FROM films")?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, Option<i64>>(2)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<i64>>(3)?,
             ))
         })?;
-        let mut inputs = HashMap::new();
+        let mut aggregates = HashMap::new();
         for row in rows {
-            let (key, genres, runtime) = row?;
+            let (key, title, genres, runtime) = row?;
             let Ok(film_id) = FilmId::from_key(&key) else {
                 continue;
             };
             let genres: Vec<Genre> = serde_json::from_str(&genres)?;
-            let runtime = runtime.map_or(0, |m| u64::try_from(m.max(0)).unwrap_or(0));
-            inputs.insert(
+            aggregates.insert(
                 film_id,
-                (genres.into_iter().map(|g| g.name).collect(), runtime),
+                FilmAggregate {
+                    title,
+                    genres: genres.into_iter().map(|g| g.name).collect(),
+                    runtime_minutes: runtime.map_or(0, |m| u64::try_from(m.max(0)).unwrap_or(0)),
+                },
             );
         }
-        Ok(inputs)
+        Ok(aggregates)
+    }
+
+    /// The number of viewings that are not their film's first viewing.
+    fn rewatch_count(&self) -> Result<usize, Error> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM (
+                 SELECT ROW_NUMBER() OVER (PARTITION BY film_id ORDER BY watched_at_ms, id) AS ordinal
+                 FROM watch_log
+             ) WHERE ordinal > 1",
+            [],
+            |row| row.get(0),
+        )?;
+        Ok(usize::try_from(n).unwrap_or(usize::MAX))
     }
 
     /// The database file path this store is open on (`:memory:` for
@@ -721,38 +753,69 @@ impl Store {
         Ok(())
     }
 
-    /// Every stored film, keyed by [`FilmId::key`].
-    fn films_map(&self) -> Result<HashMap<String, FilmMetadata>, Error> {
-        let mut stmt = self
-            .conn
-            .prepare(&format!("SELECT {FILM_COLUMNS} FROM films"))?;
-        let rows = stmt.query_map([], RawFilmRow::from_row)?;
+    /// The display columns of the films a hydration pass needs, keyed by
+    /// [`FilmId::key`]. Scoped to one film when `film_id` is given.
+    fn film_display_map(
+        &self,
+        film_id: Option<&FilmId>,
+    ) -> Result<HashMap<String, FilmDisplay>, Error> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT film_id, title, imdb_id, tmdb_id, release_year, poster_path, \
+                    certifications FROM films{}",
+            if film_id.is_some() {
+                " WHERE film_id = ?1"
+            } else {
+                ""
+            }
+        ))?;
+        let mut rows = match film_id {
+            Some(id) => stmt.query(params![id.key()])?,
+            None => stmt.query([])?,
+        };
         let mut map = HashMap::new();
-        for row in rows {
-            let film = film_from_raw(row?)?;
-            map.insert(film.film_id.key(), film);
+        while let Some(row) = rows.next()? {
+            let certifications: Option<String> = row.get(6)?;
+            map.insert(
+                row.get(0)?,
+                FilmDisplay {
+                    title: row.get(1)?,
+                    imdb_id: row.get(2)?,
+                    tmdb_id: row.get(3)?,
+                    release_year: row.get(4)?,
+                    poster_path: row.get(5)?,
+                    certifications: certifications
+                        .as_deref()
+                        .map(serde_json::from_str)
+                        .transpose()?,
+                },
+            );
         }
         Ok(map)
     }
 
     /// Each viewing's `(total viewings of its film, chronological ordinal)`.
-    fn view_counts(&self) -> Result<HashMap<i64, (i32, i32)>, Error> {
-        let mut stmt = self.conn.prepare(
+    /// Scoped to one film when `film_id` is given.
+    fn view_counts(&self, film_id: Option<&FilmId>) -> Result<HashMap<i64, (i32, i32)>, Error> {
+        let mut stmt = self.conn.prepare(&format!(
             "SELECT id, \
                     COUNT(*) OVER (PARTITION BY film_id), \
                     ROW_NUMBER() OVER (PARTITION BY film_id ORDER BY watched_at_ms, id) \
-             FROM watch_log",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, i64>(2)?,
-            ))
-        })?;
+             FROM watch_log{}",
+            if film_id.is_some() {
+                " WHERE film_id = ?1"
+            } else {
+                ""
+            }
+        ))?;
+        let mut rows = match film_id {
+            Some(id) => stmt.query(params![id.key()])?,
+            None => stmt.query([])?,
+        };
         let mut map = HashMap::new();
-        for row in rows {
-            let (id, total, ordinal) = row?;
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let total: i64 = row.get(1)?;
+            let ordinal: i64 = row.get(2)?;
             map.insert(
                 id,
                 (
@@ -766,35 +829,36 @@ impl Store {
 
     /// Overwrite each log's film-derived columns from `films`, refresh its
     /// format summary, and set the store-derived `rewatch`/`watch_count`.
-    fn hydrate(&self, logs: Vec<WatchLog>) -> Result<Vec<WatchLog>, Error> {
+    /// The lookups are scoped to one film when `film_id` is given.
+    fn hydrate(
+        &self,
+        logs: Vec<WatchLog>,
+        film_id: Option<&FilmId>,
+    ) -> Result<Vec<WatchLog>, Error> {
         if logs.is_empty() {
             return Ok(logs);
         }
-        let films = self.films_map()?;
-        let counts = self.view_counts()?;
-        Ok(logs
-            .into_iter()
-            .map(|mut log| {
-                if let Some(film) = films.get(&log.film_id.key()) {
-                    log.title.clone_from(&film.title);
-                    log.imdb_id.clone_from(&film.imdb_id);
-                    log.tmdb_id = film.tmdb_id;
-                    log.release_year = film.release_year;
-                    log.poster_path.clone_from(&film.poster_path);
-                    log.certifications.clone_from(&film.certifications);
-                }
-                log.set_derived();
-                let (total, ordinal) = counts.get(&log.id).copied().unwrap_or((1, 1));
-                log.watch_count = Some(total);
-                log.rewatch = ordinal > 1;
-                log
-            })
-            .collect())
+        let films = self.film_display_map(film_id)?;
+        let counts = self.view_counts(film_id)?;
+        let mut hydrated = Vec::with_capacity(logs.len());
+        for mut log in logs {
+            if let Some(film) = films.get(&log.film_id.key()) {
+                log.title.clone_from(&film.title);
+                log.imdb_id.clone_from(&film.imdb_id);
+                log.tmdb_id = film.tmdb_id;
+                log.release_year = film.release_year;
+                log.poster_path.clone_from(&film.poster_path);
+                log.certifications.clone_from(&film.certifications);
+            }
+            log.set_derived();
+            let (total, ordinal) = counts.get(&log.id).copied().unwrap_or((1, 1));
+            log.watch_count = Some(total);
+            log.rewatch = ordinal > 1;
+            hydrated.push(log);
+        }
+        Ok(hydrated)
     }
 }
-
-/// The number of columns in [`FILM_COLUMNS`].
-const FILM_COLUMN_COUNT: usize = 24;
 
 /// Apply the store's connection pragmas.
 fn configure(conn: &Connection) -> Result<(), Error> {
@@ -812,6 +876,71 @@ fn decode(id: i64, doc: &str) -> Result<WatchLog, Error> {
     let mut log: WatchLog = serde_json::from_str(doc)?;
     log.id = id;
     Ok(log)
+}
+
+/// The display-only film columns [`Store::hydrate`] applies to a log.
+struct FilmDisplay {
+    title: String,
+    imdb_id: Option<String>,
+    tmdb_id: Option<i64>,
+    release_year: Option<i32>,
+    poster_path: Option<String>,
+    certifications: Option<Certifications>,
+}
+
+/// The per-film inputs [`Store::stats`] aggregates.
+struct FilmAggregate {
+    title: String,
+    genres: Vec<String>,
+    runtime_minutes: u64,
+}
+
+/// The number of columns read back by [`RawLibraryFilm`].
+const LIBRARY_FILM_COLUMN_COUNT: usize = 8;
+
+/// The `films` columns read back by [`RawLibraryFilm`].
+struct RawLibraryFilm {
+    film_id: String,
+    tmdb_id: Option<i64>,
+    title: String,
+    release_year: Option<i32>,
+    poster_path: Option<String>,
+    collection: Option<String>,
+    favorite: i64,
+    watchlisted: i64,
+}
+
+impl RawLibraryFilm {
+    fn from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            film_id: row.get(0)?,
+            tmdb_id: row.get(1)?,
+            title: row.get(2)?,
+            release_year: row.get(3)?,
+            poster_path: row.get(4)?,
+            collection: row.get(5)?,
+            favorite: row.get(6)?,
+            watchlisted: row.get(7)?,
+        })
+    }
+}
+
+/// Convert a raw library row into a [`LibraryFilm`].
+fn library_film_from_raw(raw: RawLibraryFilm) -> Result<LibraryFilm, Error> {
+    Ok(LibraryFilm {
+        film_id: FilmId::from_key(&raw.film_id)?,
+        tmdb_id: raw.tmdb_id,
+        title: raw.title,
+        release_year: raw.release_year,
+        poster_path: raw.poster_path,
+        collection: raw
+            .collection
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()?,
+        favorite: raw.favorite != 0,
+        watchlisted: raw.watchlisted != 0,
+    })
 }
 
 /// The `films` columns read back by [`RawFilmRow`].

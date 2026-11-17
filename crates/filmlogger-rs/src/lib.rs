@@ -17,8 +17,8 @@ pub use catalog::{
 pub use domain::{
     CastMember, Certifications, Collection, CollectionPart, CollectionRef, Dci, Film, FilmId,
     FilmListEntry, FilmMetadata, FilmPage, FilmStats, Flag, Format, Genre, HomeMedium, Imax,
-    NewLogDetails, Projection, Rating, RatingBoard, ScreenClass, Settings, Venue, WatchLog,
-    rating_board, rating_boards,
+    LibraryFilm, NewLogDetails, Projection, Rating, RatingBoard, ScreenClass, Settings, Venue,
+    WatchLog, rating_board, rating_boards,
 };
 pub use error::Error;
 pub use service::FilmLogger;

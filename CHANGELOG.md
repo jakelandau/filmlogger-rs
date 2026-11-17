@@ -28,8 +28,9 @@ example `## [0.1.0] - 2026-11-15`.
 - Expanded statistics breakdowns by month, projection family, screen, medium,
   and presentation flag.
 - Native desktop database import/export dialogs and backup-based export/import.
-- CI for the Rust core, desktop UI, and Android APK, plus tagged-release
-  installer builds for Windows and Linux and a signed Android release APK.
+- CI for the Rust core, desktop UI, and Android APK on Windows x64, Windows
+  ARM64, Linux, and macOS, plus tagged-release installer builds for Windows
+  x86_64 and ARM64, Linux, and a signed Android release APK.
 - Automatic update checks on launch, plus manual “Check for Updates” buttons
   on desktop and Android. Releases publish Tauri updater signatures and
   `latest.json`; Android downloads the release APK and opens the installer.

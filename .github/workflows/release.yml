@@ -12,17 +12,25 @@ env:
 
 jobs:
   desktop:
-    name: Desktop bundle (${{ matrix.os }})
+    name: Desktop bundle (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # Sequential so each job's updater entry is merged into the release's
+      # existing latest.json (tauri-action appends platforms, it does not
+      # rebuild the manifest), giving windows-x86_64 and windows-aarch64.
       max-parallel: 1
       matrix:
         include:
           - os: windows-latest
-            bundles: nsis
+            label: windows-x86_64
+            args: --target x86_64-pc-windows-msvc --bundles nsis
+          - os: windows-11-arm
+            label: windows-aarch64
+            args: --target aarch64-pc-windows-msvc --bundles nsis
           - os: ubuntu-latest
-            bundles: appimage
+            label: linux
+            args: --bundles appimage
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -63,7 +71,7 @@ jobs:
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
-          args: --bundles ${{ matrix.bundles }}
+          args: ${{ matrix.args }}
 
   android:
     name: Signed Android release APK

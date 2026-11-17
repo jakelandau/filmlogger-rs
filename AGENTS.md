@@ -209,11 +209,13 @@ Notes:
   `ui/src/api.ts` and fails when a command is missing from
   `generate_handler!` or `api.ts` (or vice versa). It requires every `api.ts`
   wrapper to keep the one-line `invoke<T>("name", ...)` shape.
-- CI (`.github/workflows/ci.yml`) runs Rust tests/clippy/fmt on Windows, Linux,
-  and macOS; a secret-gated live smoke on Ubuntu; the desktop UI checks; a
-  release-mode desktop shell on all three platforms; and Android unit tests plus
-  a debug APK. The live-smoke gate must stay on the step, not the job, because
-  `env` is unavailable in a job-level `if`.
+- CI (`.github/workflows/ci.yml`) runs Rust tests/clippy/fmt on Windows x64,
+  Windows ARM64, Linux, and macOS; a secret-gated live smoke on Ubuntu; the
+  desktop UI checks; a release-mode desktop shell on every platform and both
+  Windows architectures; and Android unit tests plus a debug APK. The Windows
+  ARM64 legs use the `windows-11-arm` hosted runner, so they build natively
+  rather than cross-compiling. The live-smoke gate must stay on the step, not
+  the job, because `env` is unavailable in a job-level `if`.
 
 ### Testing conventions
 
@@ -254,10 +256,13 @@ Never commit secrets, keystores, signing properties, `.env`, or database files.
 `~/.filmlogger/`.
 
 Releases: never push a tag or create a release from an agent. Tags matching
-`v*` trigger `.github/workflows/release.yml` (Windows NSIS, Linux AppImage,
-signed Android APK, Tauri updater metadata). macOS is CI-built but not published
-until notarization credentials exist. Versions are set by the workflow from the
-tag; Android uses the Actions run number as `versionCode`.
+`v*` trigger `.github/workflows/release.yml` (Windows NSIS for x86_64 and
+aarch64, Linux AppImage, signed Android APK, Tauri updater metadata). The
+desktop matrix runs sequentially so tauri-action merges each platform into
+`latest.json`, yielding both `windows-x86_64` and `windows-aarch64`. macOS is
+CI-built but not published until notarization credentials exist. Versions are
+set by the workflow from the tag; Android uses the Actions run number as
+`versionCode`.
 
 Updaters: desktop reads
 `https://github.com/jakelandau/filmlogger-rs/releases/latest/download/latest.json`

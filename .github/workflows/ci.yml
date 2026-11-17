@@ -10,15 +10,23 @@ env:
 
 jobs:
   rust:
-    name: Rust core (${{ matrix.os }})
+    name: Rust core (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # Windows and Linux are the shipped desktop targets; macOS is built
-        # here so the Tauri app cannot regress on Apple platforms before we
-        # have a signed macOS release.
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        # Windows ships x64 and ARM64 desktop builds, so both are tested on
+        # native hardware; macOS is built here so the Tauri app cannot regress
+        # on Apple platforms before we have a signed macOS release.
+        include:
+          - os: windows-latest
+            label: windows-x64
+          - os: windows-11-arm
+            label: windows-arm64
+          - os: ubuntu-latest
+            label: linux
+          - os: macos-latest
+            label: macos
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -74,15 +82,27 @@ jobs:
         run: npm run build
 
   desktop:
-    name: Desktop shell (${{ matrix.os }})
+    name: Desktop shell (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # Same release-mode build the release workflow bundles, without the
         # installer/notarization step: proves the UI assets embed and the Tauri
-        # shell links on every platform we might ship.
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        # shell links on every platform and Windows architecture we ship.
+        include:
+          - os: windows-latest
+            label: windows-x64
+            buildArgs: --target x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            label: windows-arm64
+            buildArgs: --target aarch64-pc-windows-msvc
+          - os: ubuntu-latest
+            label: linux
+            buildArgs: ""
+          - os: macos-latest
+            label: macos
+            buildArgs: ""
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -102,7 +122,7 @@ jobs:
       - name: Build UI
         run: npm run build --prefix apps/desktop/ui
       - name: Build desktop shell (release, no bundle)
-        run: cargo build --release -p filmlogger-rs-desktop
+        run: cargo build --release -p filmlogger-rs-desktop ${{ matrix.buildArgs }}
 
   android:
     name: Android APK

@@ -3,10 +3,15 @@
 Releases are cut from semantic-version tags (`v0.1.0`, `v0.2.0`, …).
 Pushing the tag runs `.github/workflows/release.yml`, which builds and attaches:
 
-- Windows NSIS installer
+- Windows NSIS installer for x86_64 and for ARM64 (`aarch64`)
 - Linux AppImage
 - Signed Android release APK
-- Tauri updater metadata (`latest.json`) and signatures
+- Tauri updater metadata (`latest.json`) and signatures, including both
+  `windows-x86_64` and `windows-aarch64` entries
+
+The Windows jobs build natively on `windows-latest` (x64) and
+`windows-11-arm` (ARM64); the matrix is sequential so tauri-action merges each
+job's updater entry into the release's existing `latest.json`.
 
 No tag or release is pushed by the agent.
 

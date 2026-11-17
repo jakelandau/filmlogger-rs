@@ -48,6 +48,8 @@ jobs:
           cache-dependency-path: apps/desktop/ui/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust-${{ matrix.os }}
       - name: Install UI dependencies
         run: npm ci --prefix apps/desktop/ui
       - name: Set desktop version from tag
@@ -92,6 +94,8 @@ jobs:
         with:
           targets: aarch64-linux-android
       - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-rust-android
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
       - name: Decode Android signing keystore

@@ -222,8 +222,11 @@ Notes:
   inherits that glibc floor. Formatting runs once (it is platform-independent),
   clippy runs on Linux x64 and Windows x64 (it only sees workspace crates), and
   the `ui` job uploads `ui/dist` for the desktop rows instead of each row
-  rebuilding it. The live-smoke gate must stay on the step, not the job, because
-  `env` is unavailable in a job-level `if`.
+  builds it. The live-smoke gate must stay on the step, not the job, because
+  `env` is unavailable in a job-level `if`. Rust caches include the runner
+  image in their `prefix-key`: compiled artifacts are not portable across
+  distro versions (a 24.04 cache restored on 22.04 breaks with "can't find
+  crate for `tauri`" despite matching fingerprints).
 
 ### Testing conventions
 

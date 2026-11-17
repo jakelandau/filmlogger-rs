@@ -198,8 +198,20 @@ export interface FilmMetadata {
   metadata_refreshed_at: string | null;
 }
 
+/** The Films-tab and collection-card projection of a stored film. */
+export interface LibraryFilm {
+  film_id: string;
+  tmdb_id: number | null;
+  title: string;
+  release_year: number | null;
+  poster_path: string | null;
+  collection: CollectionRef | null;
+  favorite: boolean;
+  watchlisted: boolean;
+}
+
 export interface FilmListEntry {
-  film: FilmMetadata;
+  film: LibraryFilm;
   viewings: number;
   last_watched_at: string | null;
 }

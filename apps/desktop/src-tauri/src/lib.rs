@@ -1,7 +1,7 @@
 //! The desktop frontend: Tauri wiring over the [`filmlogger_rs`] facade.
 //!
-//! Blocking work (TMDB requests, SQLite reads/writes) runs on Tauri's
-//! blocking pool whenever it can, so the IPC thread never blocks the webview.
+//! Every SQLite and TMDB command runs on Tauri's blocking pool, so the IPC
+//! thread never blocks the webview during a database read, export, or import.
 //!
 //! Tauri commands receive their arguments by value (deserialized from the
 //! IPC message), so [`clippy::needless_pass_by_value`] is allowed crate-wide.
@@ -36,20 +36,26 @@ where
     .map_err(|e| e.to_string())?
 }
 
-/// Parse an IPC film id key (`tt0137523` / `tmdb:550`).
-fn parse_film_id(key: &str) -> Result<FilmId, String> {
-    FilmId::from_key(key).map_err(|e| e.to_string())
+/// Run a blocking logger operation that needs `&mut FilmLogger` (import) on
+/// the blocking pool.
+async fn run_blocking_mut<T, F>(state: &AppState, f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&mut FilmLogger) -> Result<T, filmlogger_rs::Error> + Send + 'static,
+{
+    let logger = Arc::clone(&state.logger);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut logger = logger.lock().map_err(|e| e.to_string())?;
+        f(&mut logger).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// The watch log, most recently watched first.
 #[tauri::command]
-fn list_logs(state: tauri::State<'_, AppState>) -> Result<Vec<WatchLog>, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .list()
-        .map_err(|e| e.to_string())
+async fn list_logs(state: tauri::State<'_, AppState>) -> Result<Vec<WatchLog>, String> {
+    run_blocking(&state, FilmLogger::list).await
 }
 
 /// Log a viewing of a film found by TMDB id, enriching it from TMDB.
@@ -86,85 +92,53 @@ async fn log_film(
 
 /// Update a stored log.
 #[tauri::command]
-fn update_log(state: tauri::State<'_, AppState>, log: WatchLog) -> Result<WatchLog, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .update(log)
-        .map_err(|e| e.to_string())
+async fn update_log(state: tauri::State<'_, AppState>, log: WatchLog) -> Result<WatchLog, String> {
+    run_blocking(&state, move |logger| logger.update(log)).await
 }
 
 /// Delete a stored log. Returns whether a row was deleted.
 #[tauri::command]
-fn delete_log(state: tauri::State<'_, AppState>, id: i64) -> Result<bool, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .delete(id)
-        .map_err(|e| e.to_string())
+async fn delete_log(state: tauri::State<'_, AppState>, id: i64) -> Result<bool, String> {
+    run_blocking(&state, move |logger| logger.delete(id)).await
 }
 
 /// Aggregate statistics over all logs.
 #[tauri::command]
-fn get_stats(state: tauri::State<'_, AppState>) -> Result<Stats, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .stats()
-        .map_err(|e| e.to_string())
+async fn get_stats(state: tauri::State<'_, AppState>) -> Result<Stats, String> {
+    run_blocking(&state, FilmLogger::stats).await
 }
 
 /// The stored settings.
 #[tauri::command]
-fn get_settings(state: tauri::State<'_, AppState>) -> Result<Settings, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .settings()
-        .map_err(|e| e.to_string())
+async fn get_settings(state: tauri::State<'_, AppState>) -> Result<Settings, String> {
+    run_blocking(&state, FilmLogger::settings).await
 }
 
 /// Every rating board TMDB reports certifications for.
 #[tauri::command]
-fn rating_boards(state: tauri::State<'_, AppState>) -> Result<Vec<RatingBoard>, String> {
-    Ok(state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .rating_boards())
+fn rating_boards() -> Vec<RatingBoard> {
+    filmlogger_rs::rating_boards()
 }
 
 /// Persist the selected rating board by region code.
 #[tauri::command]
-fn set_selected_board(state: tauri::State<'_, AppState>, board: String) -> Result<(), String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .set_selected_board(&board)
-        .map_err(|e| e.to_string())
+async fn set_selected_board(
+    state: tauri::State<'_, AppState>,
+    board: String,
+) -> Result<(), String> {
+    run_blocking(&state, move |logger| logger.set_selected_board(&board)).await
 }
 
 /// Export the database to `path`.
 #[tauri::command]
-fn export_to(state: tauri::State<'_, AppState>, path: String) -> Result<(), String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .export_to(path)
-        .map_err(|e| e.to_string())
+async fn export_to(state: tauri::State<'_, AppState>, path: String) -> Result<(), String> {
+    run_blocking(&state, move |logger| logger.export_to(path)).await
 }
 
 /// Replace the database contents from `path`.
 #[tauri::command]
-fn import_from(state: tauri::State<'_, AppState>, path: String) -> Result<(), String> {
-    let mut logger = state.logger.lock().map_err(|e| e.to_string())?;
-    logger.import_from(path).map_err(|e| e.to_string())
+async fn import_from(state: tauri::State<'_, AppState>, path: String) -> Result<(), String> {
+    run_blocking_mut(&state, move |logger| logger.import_from(path)).await
 }
 
 /// Search TMDB for films.
@@ -207,55 +181,46 @@ async fn refresh_film(
 
 /// The film library, with viewing summaries.
 #[tauri::command]
-fn list_films(state: tauri::State<'_, AppState>) -> Result<Vec<FilmListEntry>, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .films()
-        .map_err(|e| e.to_string())
+async fn list_films(state: tauri::State<'_, AppState>) -> Result<Vec<FilmListEntry>, String> {
+    run_blocking(&state, FilmLogger::films).await
 }
 
 /// One film's page: metadata, history, and statistics.
 #[tauri::command]
-fn get_film_page(state: tauri::State<'_, AppState>, film_id: String) -> Result<FilmPage, String> {
-    let key = film_id;
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .film_page(&parse_film_id(&key)?)
-        .map_err(|e| e.to_string())
+async fn get_film_page(
+    state: tauri::State<'_, AppState>,
+    film_id: String,
+) -> Result<FilmPage, String> {
+    run_blocking(&state, move |logger| {
+        logger.film_page(&FilmId::from_key(&film_id)?)
+    })
+    .await
 }
 
 /// Mark a film a favorite (or clear it).
 #[tauri::command]
-fn set_favorite(
+async fn set_favorite(
     state: tauri::State<'_, AppState>,
     film_id: String,
     favorite: bool,
 ) -> Result<FilmMetadata, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .set_favorite(&parse_film_id(&film_id)?, favorite)
-        .map_err(|e| e.to_string())
+    run_blocking(&state, move |logger| {
+        logger.set_favorite(&FilmId::from_key(&film_id)?, favorite)
+    })
+    .await
 }
 
 /// Add a stored film to the bucket list (or remove it).
 #[tauri::command]
-fn set_watchlisted(
+async fn set_watchlisted(
     state: tauri::State<'_, AppState>,
     film_id: String,
     watchlisted: bool,
 ) -> Result<FilmMetadata, String> {
-    state
-        .logger
-        .lock()
-        .map_err(|e| e.to_string())?
-        .set_watchlisted(&parse_film_id(&film_id)?, watchlisted)
-        .map_err(|e| e.to_string())
+    run_blocking(&state, move |logger| {
+        logger.set_watchlisted(&FilmId::from_key(&film_id)?, watchlisted)
+    })
+    .await
 }
 
 /// Fetch a TMDB collection and its films.
@@ -345,3 +310,6 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("while running the tauri application");
 }
+
+#[cfg(test)]
+mod contract_tests;

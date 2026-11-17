@@ -10,44 +10,28 @@ import type {
   Collection,
   CollectionPart,
   FilmListEntry,
-  FilmMetadata,
+  LibraryFilm,
 } from "./types";
 
-function metadata(overrides: Partial<FilmMetadata>): FilmMetadata {
+function libraryFilm(overrides: Partial<LibraryFilm>): LibraryFilm {
   return {
     film_id: "tt0000001",
     tmdb_id: 1,
-    imdb_id: null,
     title: "Film",
-    original_title: null,
-    release_date: null,
     release_year: null,
-    runtime_minutes: null,
-    overview: null,
-    tagline: null,
-    original_language: null,
     poster_path: null,
-    backdrop_path: null,
-    vote_average: null,
-    vote_count: null,
-    popularity: null,
-    adult: false,
-    genres: [],
-    cast: [],
-    certifications: null,
     collection: null,
     favorite: false,
     watchlisted: false,
-    metadata_refreshed_at: null,
     ...overrides,
   };
 }
 
 function entry(
-  film: Partial<FilmMetadata> & { tmdb_id: number; title: string },
+  film: Partial<LibraryFilm> & { tmdb_id: number; title: string },
   viewings = 0,
 ): FilmListEntry {
-  return { film: metadata(film), viewings, last_watched_at: null };
+  return { film: libraryFilm(film), viewings, last_watched_at: null };
 }
 
 function part(tmdbId: number, title: string, releaseYear: number | null = null): CollectionPart {

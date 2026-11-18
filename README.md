@@ -1,4 +1,4 @@
-# FilmLoggerRust
+# FilmLogger
 
 A monorepo for the **FilmLogger** products — a personal film watch-log backed by
 the [TMDB API](https://developer.themoviedb.org/docs/getting-started) and

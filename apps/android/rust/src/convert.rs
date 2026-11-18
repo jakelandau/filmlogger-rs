@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 
 use crate::types::{
     CastMember, Certification, Certifications, Collection, CollectionPart, CollectionRef,
-    CountEntry, Dci, Film, FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, FilmViewings,
-    Format, FormatCatalog, FormatGroup, FormatLegality, FormatOption, FormatParts, Genre,
+    CountEntry, Dci, Film, FilmId, FilmListEntry, FilmMetadata, FilmPage, FilmStats, Format,
+    FormatCatalog, FormatGroup, FormatLegality, FormatOption, FormatParts, Genre,
     HomeFormatLegality, HomeMedium, Imax, LibraryFilm, LoggerError, Movie, MovieSummary,
     NewLogDetails, Projection, Rating, RatingBoard, RatingCounts, ScreenClass, SearchPage,
     Settings, Stats, Venue, VenueCounts, WatchLog, YearCount,
@@ -755,16 +755,6 @@ impl From<core::VenueCounts> for VenueCounts {
     }
 }
 
-impl From<core::FilmViewings> for FilmViewings {
-    fn from(f: core::FilmViewings) -> Self {
-        Self {
-            title: f.title,
-            #[allow(clippy::cast_possible_truncation)]
-            count: f.count as u32,
-        }
-    }
-}
-
 impl From<core::Stats> for Stats {
     fn from(s: core::Stats) -> Self {
         Self {
@@ -784,18 +774,22 @@ impl From<core::Stats> for Stats {
                 .collect(),
             #[allow(clippy::cast_possible_truncation)]
             rewatches: s.rewatches as u32,
-            top_films: s.top_films.into_iter().map(Into::into).collect(),
-            viewings_by_month: count_entries(s.viewings_by_month),
+            viewings_by_month: s
+                .viewings_by_month
+                .into_iter()
+                .map(|month| CountEntry {
+                    key: month.month,
+                    #[allow(clippy::cast_possible_truncation)]
+                    count: month.count as u32,
+                })
+                .collect(),
             viewings_by_projection_family: count_entries(s.viewings_by_projection_family),
-            viewings_by_screen: count_entries(s.viewings_by_screen),
             viewings_by_medium: count_entries(s.viewings_by_medium),
             viewings_by_flag: count_entries(s.viewings_by_flag),
             ratings: s.ratings.into(),
             viewings_by_genre: count_entries(s.viewings_by_genre),
             #[allow(clippy::cast_possible_truncation)]
             total_runtime_minutes: u32::try_from(s.total_runtime_minutes).unwrap_or(u32::MAX),
-            first_viewed_at: s.first_viewed_at.map(|t| t.to_rfc3339()),
-            last_viewed_at: s.last_viewed_at.map(|t| t.to_rfc3339()),
         }
     }
 }
@@ -807,8 +801,6 @@ impl From<core::RatingCounts> for RatingCounts {
             up: r.up as u32,
             #[allow(clippy::cast_possible_truncation)]
             down: r.down as u32,
-            #[allow(clippy::cast_possible_truncation)]
-            unrated: r.unrated as u32,
         }
     }
 }

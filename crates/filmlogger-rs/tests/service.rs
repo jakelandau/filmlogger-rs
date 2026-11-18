@@ -338,11 +338,15 @@ fn stats_breakdowns() {
     assert_eq!(stats.viewings_by_projection_family.get("dci"), Some(&1));
     assert_eq!(stats.viewings_by_projection_family.get("imax"), Some(&1));
     assert_eq!(stats.viewings_by_projection_family.get("home"), Some(&1));
-    assert_eq!(stats.viewings_by_screen.get("plf"), Some(&1));
-    assert_eq!(stats.viewings_by_screen.get("imax_class"), Some(&1));
     assert_eq!(stats.viewings_by_medium.get("bluray"), Some(&1));
     assert_eq!(stats.viewings_by_flag.get("three_d"), Some(&2));
-    assert_eq!(stats.viewings_by_month.get("2021-03"), Some(&3));
+    assert_eq!(
+        stats.viewings_by_month,
+        vec![filmlogger_rs::MonthViewings {
+            month: "March 2021".into(),
+            count: 3
+        }]
+    );
 }
 
 #[test]

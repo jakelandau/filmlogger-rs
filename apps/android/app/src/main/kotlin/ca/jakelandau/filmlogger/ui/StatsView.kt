@@ -1,5 +1,6 @@
 package ca.jakelandau.filmlogger.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,24 +13,52 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import uniffi.filmlogger_rs_ffi.CountEntry
 import uniffi.filmlogger_rs_ffi.FormatCatalog
 import uniffi.filmlogger_rs_ffi.Stats
 import uniffi.filmlogger_rs_ffi.WatchLog
+
+/** Slice colors, shared with the desktop stats screen. */
+private val FAMILY_COLORS = mapOf(
+    "dci" to Color(0xFFD489A4),
+    "imax" to Color(0xFF8FC4E8),
+    "film" to Color(0xFFFFB27A),
+    "home" to Color(0xFF8FE3C0),
+)
+private val FALLBACK_COLOR = Color(0xFF9D95A3)
+private val RATING_UP_COLOR = Color(0xFF8FE3C0)
+private val RATING_DOWN_COLOR = Color(0xFFE5484D)
+
+/** One pie slice: label, count, and slice color. */
+private data class Slice(val label: String, val count: Int, val color: Color)
+
+/** The switchable timeline views, matching the desktop buttons. */
+private enum class TimelineMode(val label: String) {
+    YEAR("Year"),
+    MONTH("Month"),
+    WEEKDAY("Weekday"),
+}
 
 /**
  * Aggregate statistics over the stored logs. Section order, labels, and
@@ -44,9 +73,10 @@ fun StatsView(stats: Stats?, catalog: FormatCatalog, logs: List<WatchLog>) {
         return
     }
 
-    val screenLabels = catalog.screens.flatMap { it.options }.associate { it.key to it.label }
     val mediumLabels = catalog.mediums.associate { it.key to it.label }
     val flagLabels = catalog.flagLabels.associate { it.key to it.label }
+    val ratings = ratingSlices(stats)
+    val families = familySlices(stats)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -88,37 +118,14 @@ fun StatsView(stats: Stats?, catalog: FormatCatalog, logs: List<WatchLog>) {
             Spacer(Modifier.height(16.dp))
         }
 
-        breakdownValues(
-            "Ratings",
-            listOf(
-                "👍 Liked" to stats.ratings.up.toInt(),
-                "👎 Disliked" to stats.ratings.down.toInt(),
-                "Unrated" to stats.ratings.unrated.toInt(),
-            ),
-        )
-        breakdownValues(
-            "Viewings by month",
-            stats.viewingsByMonth
-                .sortedByDescending { it.key }
-                .map { it.key to it.count.toInt() },
-        )
-        breakdownValues(
-            "Viewings by weekday",
-            weekdayCounts(logs),
-        )
-        breakdownValues(
-            "Viewings by hour",
-            hourCounts(logs),
-        )
-        yearSection(stats)
-        breakdownValues(
-            "Viewings by projection family",
-            countEntries(stats.viewingsByProjectionFamily) { familyLabel(it) },
-        )
-        breakdownValues(
-            "Viewings by auditorium",
-            countEntries(stats.viewingsByScreen) { screenLabels[it] ?: it },
-        )
+        if (ratings.isNotEmpty()) {
+            item { PieSection("Ratings", ratings) }
+        }
+        item { TimelineSection(stats, logs) }
+        breakdownValues("Viewings by time of day", timeOfDayCounts(logs))
+        if (families.isNotEmpty()) {
+            item { PieSection("Viewings by projection family", families) }
+        }
         breakdownValues(
             "Home viewings by medium",
             countEntries(stats.viewingsByMedium) { mediumLabels[it] ?: it },
@@ -128,22 +135,14 @@ fun StatsView(stats: Stats?, catalog: FormatCatalog, logs: List<WatchLog>) {
             countEntries(stats.viewingsByFlag) { flagLabels[it] ?: it },
         )
         breakdownValues("Top genres", topGenres(stats))
-        topFilmsSection(stats)
         item { Spacer(Modifier.height(12.dp)) }
     }
 }
 
-/** `Time watched: … · First: … · Last: …`, each half omitted when unknown. */
+/** `Time watched: …`, omitted when no runtime is known. */
 private fun metaLine(stats: Stats): String {
-    if (stats.totalViewings == 0u) return ""
-    val parts = buildList {
-        if (stats.totalRuntimeMinutes > 0u) {
-            add("Time watched: ${formatDuration(stats.totalRuntimeMinutes)}")
-        }
-        stats.firstViewedAt?.let { add("First: ${TimeUtils.display(it)}") }
-        stats.lastViewedAt?.let { add("Last: ${TimeUtils.display(it)}") }
-    }
-    return parts.joinToString(" · ")
+    if (stats.totalViewings == 0u || stats.totalRuntimeMinutes == 0u) return ""
+    return "Time watched: ${formatDuration(stats.totalRuntimeMinutes)}"
 }
 
 /** `Xh Ym`, `Xh` on the hour, `Ym` under an hour. */
@@ -163,6 +162,22 @@ private fun rewatchRate(stats: Stats): String {
     val pct = (stats.rewatches.toDouble() / stats.totalViewings.toDouble() * 100).roundToInt()
     return "$pct%"
 }
+
+/** Liked/disliked slices; both are listed once anything is rated. */
+private fun ratingSlices(stats: Stats): List<Slice> {
+    if (stats.ratings.up + stats.ratings.down == 0u) return emptyList()
+    return listOf(
+        Slice("👍 Liked", stats.ratings.up.toInt(), RATING_UP_COLOR),
+        Slice("👎 Disliked", stats.ratings.down.toInt(), RATING_DOWN_COLOR),
+    )
+}
+
+/** One slice per projection family, count descending then key ascending. */
+private fun familySlices(stats: Stats): List<Slice> = stats.viewingsByProjectionFamily
+    .sortedWith(compareByDescending<CountEntry> { it.count }.thenBy { it.key })
+    .map { entry ->
+        Slice(familyLabel(entry.key), entry.count.toInt(), FAMILY_COLORS[entry.key] ?: FALLBACK_COLOR)
+    }
 
 /** Count-descending, key-ascending `(label, count)` entries. */
 private fun countEntries(entries: List<CountEntry>, label: (String) -> String): List<Pair<String, Int>> =
@@ -184,65 +199,98 @@ private fun familyLabel(key: String): String = when (key) {
     else -> key
 }
 
-/** One heading plus a header row and one row per year, descending. */
-private fun LazyListScope.yearSection(stats: Stats) {
-    if (stats.viewingsByYear.isEmpty()) return
-    item {
-        Text("Viewings by year", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(8.dp))
-        HeaderRow("Year", "Viewings")
-    }
-    items(stats.viewingsByYear.reversed()) { yearCount ->
-        KeyValueRow(yearCount.year.toString(), yearCount.count.toString())
-    }
-    item { Spacer(Modifier.height(12.dp)) }
-}
-
-/** One heading plus a header row and the ten most-watched films. */
-private fun LazyListScope.topFilmsSection(stats: Stats) {
-    val films = stats.topFilms.take(10)
-    if (films.isEmpty()) return
-    item {
-        Text("Most watched", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(8.dp))
-        HeaderRow("Film", "Times")
-    }
-    items(films) { film -> KeyValueRow(film.title, film.count.toString()) }
-    item { Spacer(Modifier.height(12.dp)) }
-}
-
+/** A pie plus legend, rendered as one list item. */
 @Composable
-private fun HeaderRow(left: String, right: String) {
+private fun PieSection(title: String, slices: List<Slice>) {
+    val total = slices.sumOf { it.count }
+    if (total == 0) return
+    Text(title, style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(8.dp))
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            left,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.weight(1f))
-        Text(
-            right,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Canvas(Modifier.size(140.dp)) {
+            var start = -90f
+            for (slice in slices) {
+                if (slice.count == 0) continue
+                val sweep = 360f * slice.count / total
+                drawArc(
+                    color = slice.color,
+                    startAngle = start,
+                    sweepAngle = sweep,
+                    useCenter = true,
+                )
+                start += sweep
+            }
+        }
+        Spacer(Modifier.width(20.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (slice in slices) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(slice.color),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        slice.label,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        slice.count.toString(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
     }
+    Spacer(Modifier.height(12.dp))
 }
 
+/** Year, month, and weekday viewings in one section, newest first. */
 @Composable
-private fun KeyValueRow(left: String, right: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-    ) {
-        Text(left, style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.weight(1f))
-        Text(right, style = MaterialTheme.typography.bodyMedium)
+private fun TimelineSection(stats: Stats, logs: List<WatchLog>) {
+    val yearEntries = stats.viewingsByYear
+        .sortedByDescending { it.year }
+        .map { it.year.toString() to it.count.toInt() }
+    // The core orders months oldest first; show newest first like years.
+    val monthEntries = stats.viewingsByMonth.reversed().map { it.key to it.count.toInt() }
+    val weekdayEntries = weekdayCounts(logs)
+    if (yearEntries.isEmpty() && monthEntries.isEmpty() && weekdayEntries.isEmpty()) return
+
+    var mode by remember { mutableStateOf(TimelineMode.YEAR) }
+    val entries = when (mode) {
+        TimelineMode.YEAR -> yearEntries
+        TimelineMode.MONTH -> monthEntries
+        TimelineMode.WEEKDAY -> weekdayEntries
     }
+    Text("Viewings over time", style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (option in TimelineMode.entries) {
+            FilterChip(
+                selected = mode == option,
+                onClick = { mode = option },
+                label = { Text(option.label) },
+            )
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    val max = entries.maxOfOrNull { it.second } ?: 0
+    Column(Modifier.fillMaxWidth()) {
+        for ((label, count) in entries) BreakdownRow(label, count, max)
+    }
+    Spacer(Modifier.height(12.dp))
 }
 
 /** Add one breakdown section (title plus proportional-bar rows) to the list. */

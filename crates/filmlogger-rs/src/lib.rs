@@ -22,5 +22,5 @@ pub use domain::{
 };
 pub use error::Error;
 pub use service::FilmLogger;
-pub use store::{FilmViewings, RatingCounts, Stats, Store, VenueCounts};
+pub use store::{MonthViewings, RatingCounts, Stats, Store, VenueCounts};
 pub use tmdb::{COMPILED_API_KEY, Movie, MovieSummary, SearchPage, TmdbClient};

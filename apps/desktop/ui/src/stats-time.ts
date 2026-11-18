@@ -1,6 +1,7 @@
-// Weekday and hour-of-day buckets for the Stats tab. The core crate
-// aggregates every other dimension in UTC, but weekday and hour must be read
-// in the log's own wall clock, so each client resolves the zone locally.
+// Weekday and time-of-day buckets for the Stats tab. The core crate
+// aggregates every other dimension in UTC, but weekday and wall-clock time
+// must be read in the log's own zone, so each client resolves the zone
+// locally.
 
 import { systemTimeZone } from "./time";
 import type { WatchLog } from "./types";
@@ -15,6 +16,9 @@ const WEEKDAYS = [
   "Saturday",
   "Sunday",
 ];
+
+/** Time-of-day quadrants, midnight first (the contract order). */
+const TIME_OF_DAY = ["00:00–06:00", "06:00–12:00", "12:00–18:00", "18:00–24:00"];
 
 /** `log.timezone` when `Intl` accepts it, else the device zone. */
 function resolveZone(timezone: string | null | undefined): string {
@@ -72,15 +76,15 @@ export function weekdayCounts(logs: WatchLog[]): [string, number][] {
   );
 }
 
-/** Viewings per hour (`HH:00`), ascending, empty buckets omitted. */
-export function hourCounts(logs: WatchLog[]): [string, number][] {
-  const counts = Array.from({ length: 24 }, () => 0);
+/** Viewings per time-of-day quadrant, midnight first, empty buckets omitted. */
+export function timeOfDayCounts(logs: WatchLog[]): [string, number][] {
+  const counts = TIME_OF_DAY.map(() => 0);
   for (const log of logs) {
     const clock = wallClock(log.watched_at, resolveZone(log.timezone));
     if (clock == null) continue;
-    counts[clock.hour] += 1;
+    counts[Math.floor(clock.hour / 6)] += 1;
   }
-  return counts.flatMap((count, hour): [string, number][] =>
-    count === 0 ? [] : [[`${String(hour).padStart(2, "0")}:00`, count]]
+  return TIME_OF_DAY.flatMap((label, index): [string, number][] =>
+    counts[index] === 0 ? [] : [[label, counts[index]]]
   );
 }

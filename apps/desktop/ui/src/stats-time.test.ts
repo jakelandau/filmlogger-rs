@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hourCounts, weekdayCounts } from "./stats-time";
+import { timeOfDayCounts, weekdayCounts } from "./stats-time";
 import type { WatchLog } from "./types";
 
 // Shared fixtures with the Android `StatsTimeTest`: America/New_York, after
@@ -41,21 +41,21 @@ describe("stats time buckets", () => {
     ]);
   });
 
-  it("buckets hours in the log's zone, ascending", () => {
-    expect(hourCounts(FIXTURES)).toEqual([
-      ["09:00", 1],
-      ["21:00", 3],
+  it("buckets time of day in the log's zone, midnight first", () => {
+    expect(timeOfDayCounts(FIXTURES)).toEqual([
+      ["06:00–12:00", 1],
+      ["18:00–24:00", 3],
     ]);
   });
 
   it("falls back to the device zone for an unknown zone", () => {
     const counts = weekdayCounts([log("2026-11-16T02:30:00Z", "Not/AZone")]);
     expect(counts.reduce((sum, [, count]) => sum + count, 0)).toBe(1);
-    expect(hourCounts([log("2026-11-16T02:30:00Z", null)])).toHaveLength(1);
+    expect(timeOfDayCounts([log("2026-11-16T02:30:00Z", null)])).toHaveLength(1);
   });
 
   it("skips unparseable timestamps", () => {
     expect(weekdayCounts([log("not-a-date")])).toEqual([]);
-    expect(hourCounts([log("not-a-date")])).toEqual([]);
+    expect(timeOfDayCounts([log("not-a-date")])).toEqual([]);
   });
 });

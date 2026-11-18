@@ -742,6 +742,55 @@ select {
   background: var(--burgundy);
 }
 
+/* Stats pies (ratings, projection family) */
+.pie-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.pie {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.legend-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.legend-count {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .load-more {
   margin-top: 8px;
 }

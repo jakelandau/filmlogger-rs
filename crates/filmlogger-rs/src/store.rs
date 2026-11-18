@@ -10,11 +10,11 @@
 //! recomputed on every read from the film's viewings in chronological order
 //! (`watched_at_ms`, then row id), so deleting a viewing corrects the rest.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::time::Duration;
 
-use chrono::{DateTime, Datelike, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use rusqlite::backup::Backup;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::Serialize;
@@ -348,22 +348,20 @@ impl Store {
         let mut by_venue = VenueCounts::default();
         let mut ratings = RatingCounts::default();
         let mut by_year = BTreeMap::new();
-        let mut by_month = BTreeMap::new();
+        let mut by_month: BTreeMap<(i32, u32), usize> = BTreeMap::new();
         let mut by_family = BTreeMap::new();
-        let mut by_screen = BTreeMap::new();
         let mut by_medium = BTreeMap::new();
         let mut by_flag = BTreeMap::new();
         let mut by_genre: BTreeMap<String, usize> = BTreeMap::new();
         let mut total_runtime_minutes: u64 = 0;
-        let mut first_viewed_at: Option<DateTime<Utc>> = None;
-        let mut last_viewed_at: Option<DateTime<Utc>> = None;
-        let mut per_film: HashMap<FilmId, (String, usize)> = HashMap::new();
+        let mut films_seen: HashSet<FilmId> = HashSet::new();
         let mut total_viewings = 0;
         while let Some(row) = rows.next()? {
             let id: i64 = row.get(0)?;
             let doc: String = row.get(1)?;
             let log = decode(id, &doc)?;
             total_viewings += 1;
+            films_seen.insert(log.film_id.clone());
             match log.venue {
                 Venue::Theatre => by_venue.theatre += 1,
                 Venue::Home => by_venue.home += 1,
@@ -371,7 +369,7 @@ impl Store {
             match log.rating {
                 Some(Rating::Up) => ratings.up += 1,
                 Some(Rating::Down) => ratings.down += 1,
-                None => ratings.unrated += 1,
+                None => {}
             }
             if let Some(film) = films.get(&log.film_id) {
                 for name in &film.genres {
@@ -379,76 +377,59 @@ impl Store {
                 }
                 total_runtime_minutes += film.runtime_minutes;
             }
-            first_viewed_at =
-                Some(first_viewed_at.map_or(log.watched_at, |first| first.min(log.watched_at)));
-            last_viewed_at =
-                Some(last_viewed_at.map_or(log.watched_at, |last| last.max(log.watched_at)));
             *by_year.entry(log.watched_at.year()).or_default() += 1;
             *by_month
-                .entry(format!(
-                    "{:04}-{:02}",
-                    log.watched_at.year(),
-                    log.watched_at.month()
-                ))
+                .entry((log.watched_at.year(), log.watched_at.month()))
                 .or_default() += 1;
             count_format(
                 log.format.as_ref(),
                 &mut by_family,
-                &mut by_screen,
                 &mut by_medium,
                 &mut by_flag,
             );
-            let title = films
-                .get(&log.film_id)
-                .map_or_else(|| log.title.clone(), |film| film.title.clone());
-            let entry = per_film
-                .entry(log.film_id.clone())
-                .or_insert_with(|| (title, 0));
-            entry.1 += 1;
         }
-        let distinct_films = per_film.len();
-        let mut top_films: Vec<FilmViewings> = per_film
+        let viewings_by_month = by_month
             .into_iter()
-            .map(|(_, (title, count))| FilmViewings { title, count })
+            .map(|((year, month), count)| MonthViewings {
+                month: NaiveDate::from_ymd_opt(year, month, 1).map_or_else(
+                    || format!("{year:04}-{month:02}"),
+                    |date| date.format("%B %Y").to_string(),
+                ),
+                count,
+            })
             .collect();
-        top_films.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.title.cmp(&b.title)));
         Ok(Stats {
             total_viewings,
-            distinct_films,
+            distinct_films: films_seen.len(),
             viewings_by_venue: by_venue,
             viewings_by_year: by_year,
-            viewings_by_month: by_month,
+            viewings_by_month,
             viewings_by_projection_family: by_family,
-            viewings_by_screen: by_screen,
             viewings_by_medium: by_medium,
             viewings_by_flag: by_flag,
             ratings,
             viewings_by_genre: by_genre,
             total_runtime_minutes,
-            first_viewed_at,
-            last_viewed_at,
             rewatches,
-            top_films,
         })
     }
 
-    /// The per-film inputs [`Store::stats`] needs: each stored film's title,
-    /// genre names, and runtime in minutes (0 when unknown).
+    /// The per-film inputs [`Store::stats`] needs: genre names and runtime in
+    /// minutes (0 when unknown).
     fn film_aggregates(&self) -> Result<HashMap<FilmId, FilmAggregate>, Error> {
         let mut stmt = self
             .conn
-            .prepare("SELECT film_id, title, genres, runtime_minutes FROM films")?;
+            .prepare("SELECT film_id, genres, runtime_minutes FROM films")?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<i64>>(3)?,
+                row.get::<_, Option<i64>>(2)?,
             ))
         })?;
         let mut aggregates = HashMap::new();
         for row in rows {
-            let (key, title, genres, runtime) = row?;
+            let (key, genres, runtime) = row?;
             let Ok(film_id) = FilmId::from_key(&key) else {
                 continue;
             };
@@ -456,7 +437,6 @@ impl Store {
             aggregates.insert(
                 film_id,
                 FilmAggregate {
-                    title,
                     genres: genres.into_iter().map(|g| g.name).collect(),
                     runtime_minutes: runtime.map_or(0, |m| u64::try_from(m.max(0)).unwrap_or(0)),
                 },
@@ -890,7 +870,6 @@ struct FilmDisplay {
 
 /// The per-film inputs [`Store::stats`] aggregates.
 struct FilmAggregate {
-    title: String,
     genres: Vec<String>,
     runtime_minutes: u64,
 }
@@ -1132,27 +1111,25 @@ fn insert_film_row(
     Ok(conn.execute(&sql, rusqlite::params_from_iter(values))?)
 }
 
-/// Add one log's format to the family, auditorium, medium, and flag
-/// breakdowns. Logs with no stored format contribute nothing.
+/// Add one log's format to the family, medium, and flag breakdowns. Logs with
+/// no stored format contribute nothing.
 fn count_format(
     format: Option<&Format>,
     by_family: &mut BTreeMap<String, usize>,
-    by_screen: &mut BTreeMap<String, usize>,
     by_medium: &mut BTreeMap<String, usize>,
     by_flag: &mut BTreeMap<String, usize>,
 ) {
     match format {
         Some(Format::Theatre {
             projection,
-            screen,
             three_d,
             hfr,
             dbox,
+            ..
         }) => {
             *by_family
                 .entry(projection.family_key().to_string())
                 .or_default() += 1;
-            *by_screen.entry(screen.key().to_string()).or_default() += 1;
             for (key, on) in [("three_d", *three_d), ("hfr", *hfr), ("dbox", *dbox)] {
                 if on {
                     *by_flag.entry(key.to_string()).or_default() += 1;
@@ -1224,32 +1201,32 @@ pub struct Stats {
     pub viewings_by_venue: VenueCounts,
     /// Viewings by UTC calendar year, ascending.
     pub viewings_by_year: BTreeMap<i32, usize>,
-    /// Viewings by UTC calendar month (`YYYY-MM`), ascending.
-    pub viewings_by_month: BTreeMap<String, usize>,
+    /// Viewings by UTC calendar month, oldest first.
+    pub viewings_by_month: Vec<MonthViewings>,
     /// Viewings by projection family: `dci`, `imax`, `film`, or `home`.
     pub viewings_by_projection_family: BTreeMap<String, usize>,
-    /// Viewings by auditorium class.
-    pub viewings_by_screen: BTreeMap<String, usize>,
     /// Home viewings by release medium.
     pub viewings_by_medium: BTreeMap<String, usize>,
     /// Viewings per presentation flag: `three_d`, `hfr`, or `dbox`.
     pub viewings_by_flag: BTreeMap<String, usize>,
-    /// Viewings per rating (up, down, unrated; always sums to
-    /// [`Stats::total_viewings`]).
+    /// Viewings per rating (up and down).
     pub ratings: RatingCounts,
     /// Viewings per genre name of the logged film, ascending.
     pub viewings_by_genre: BTreeMap<String, usize>,
     /// Total runtime of every viewing, in minutes (0 when no runtime is
     /// known).
     pub total_runtime_minutes: u64,
-    /// The earliest `watched_at` across all logs, if any.
-    pub first_viewed_at: Option<DateTime<Utc>>,
-    /// The latest `watched_at` across all logs, if any.
-    pub last_viewed_at: Option<DateTime<Utc>>,
     /// Viewings flagged as a rewatch.
     pub rewatches: usize,
-    /// Top films by viewing count, descending (title as tie-break).
-    pub top_films: Vec<FilmViewings>,
+}
+
+/// Viewings in one UTC calendar month.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MonthViewings {
+    /// Display label, e.g. `"June 2020"`.
+    pub month: String,
+    /// Number of viewings that month.
+    pub count: usize,
 }
 
 impl Stats {
@@ -1284,24 +1261,13 @@ pub struct RatingCounts {
     pub up: usize,
     /// Viewings rated thumbs down.
     pub down: usize,
-    /// Viewings left unrated.
-    pub unrated: usize,
-}
-
-/// A single film's viewing count, for ranked reports.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct FilmViewings {
-    /// Denormalized film title.
-    pub title: String,
-    /// Number of times this film has been watched.
-    pub count: usize,
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{FilmViewings, RatingCounts, Store, VenueCounts};
+    use super::{MonthViewings, RatingCounts, Store, VenueCounts};
     use crate::domain::{
         Dci, FilmId, FilmMetadata, Format, Genre, HomeMedium, Projection, Rating, ScreenClass,
         Venue, WatchLog,
@@ -1383,14 +1349,12 @@ mod tests {
         assert_eq!(stats.distinct_films, 0);
         assert_eq!(stats.viewings_by_venue, VenueCounts::default());
         assert_eq!(stats.viewings_by_year, BTreeMap::new());
+        assert_eq!(stats.viewings_by_month, Vec::new());
         assert_eq!(stats.ratings, RatingCounts::default());
         assert_eq!(stats.viewings_by_genre, BTreeMap::new());
         assert_eq!(stats.total_runtime_minutes, 0);
-        assert_eq!(stats.first_viewed_at, None);
-        assert_eq!(stats.last_viewed_at, None);
         assert_eq!(stats.rewatches, 0);
         assert_eq!(stats.rewatch_rate(), 0.0);
-        assert_eq!(stats.top_films, Vec::new());
     }
 
     /// A stored film row with genres and a runtime, for stats tests.
@@ -1444,34 +1408,29 @@ mod tests {
         );
 
         let stats = store.stats().unwrap();
-        assert_eq!(
-            stats.ratings,
-            RatingCounts {
-                up: 1,
-                down: 1,
-                unrated: 1
-            }
-        );
+        assert_eq!(stats.ratings, RatingCounts { up: 1, down: 1 });
         assert_eq!(stats.total_runtime_minutes, 320);
-        assert_eq!(stats.first_viewed_at, Some(at(2020)));
-        assert_eq!(stats.last_viewed_at, Some(at(2022)));
-        let mut by_genre = BTreeMap::new();
-        by_genre.insert("Drama".to_owned(), 3);
-        by_genre.insert("Thriller".to_owned(), 2);
-        assert_eq!(stats.viewings_by_genre, by_genre);
         assert_eq!(
-            stats.top_films,
+            stats.viewings_by_month,
             vec![
-                FilmViewings {
-                    title: "Film A".into(),
-                    count: 2
+                MonthViewings {
+                    month: "June 2020".into(),
+                    count: 1
                 },
-                FilmViewings {
-                    title: "Film B".into(),
+                MonthViewings {
+                    month: "June 2021".into(),
+                    count: 1
+                },
+                MonthViewings {
+                    month: "June 2022".into(),
                     count: 1
                 },
             ],
         );
+        let mut by_genre = BTreeMap::new();
+        by_genre.insert("Drama".to_owned(), 3);
+        by_genre.insert("Thriller".to_owned(), 2);
+        assert_eq!(stats.viewings_by_genre, by_genre);
     }
 
     #[test]
@@ -1539,15 +1498,19 @@ mod tests {
         assert_eq!(stats.rewatches, 3);
         assert!((stats.rewatch_rate() - 0.6).abs() < 1e-9);
         assert_eq!(
-            stats.top_films,
+            stats.viewings_by_month,
             vec![
-                FilmViewings {
-                    title: "Film A".into(),
+                MonthViewings {
+                    month: "June 2020".into(),
+                    count: 1
+                },
+                MonthViewings {
+                    month: "June 2021".into(),
                     count: 3
                 },
-                FilmViewings {
-                    title: "Film B".into(),
-                    count: 2
+                MonthViewings {
+                    month: "June 2022".into(),
+                    count: 1
                 },
             ],
         );

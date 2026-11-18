@@ -3,8 +3,7 @@
 
 use filmlogger_rs::domain::{Dci, FilmId, Format, HomeMedium, Projection, ScreenClass};
 use filmlogger_rs::{
-    CastMember, Certifications, CollectionRef, Error, FilmMetadata, FilmViewings, Genre, Store,
-    Venue, WatchLog,
+    CastMember, Certifications, CollectionRef, Error, FilmMetadata, Genre, Store, Venue, WatchLog,
 };
 use rusqlite::Connection;
 
@@ -267,13 +266,7 @@ fn stats_use_stored_film_metadata() {
     store.upsert_film(&film).unwrap();
 
     let stats = store.stats().unwrap();
-    assert_eq!(
-        stats.top_films,
-        vec![FilmViewings {
-            title: "New title".into(),
-            count: 1
-        }]
-    );
+    assert_eq!(stats.distinct_films, 1);
     assert_eq!(stats.viewings_by_genre.get("Drama"), Some(&1));
     assert_eq!(stats.total_runtime_minutes, 120);
 }

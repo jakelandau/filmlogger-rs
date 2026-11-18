@@ -370,30 +370,23 @@ pub struct Stats {
     pub viewings_by_venue: VenueCounts,
     /// Viewings by UTC calendar year, ascending.
     pub viewings_by_year: Vec<YearCount>,
-    /// Viewings by UTC calendar month (`YYYY-MM`), ascending.
+    /// Viewings by UTC calendar month, oldest first; `key` is the display
+    /// label (for example `"June 2020"`).
     pub viewings_by_month: Vec<CountEntry>,
     /// Viewings by projection family: `dci`, `imax`, `film`, or `home`.
     pub viewings_by_projection_family: Vec<CountEntry>,
-    /// Viewings by auditorium class.
-    pub viewings_by_screen: Vec<CountEntry>,
     /// Home viewings by release medium.
     pub viewings_by_medium: Vec<CountEntry>,
     /// Viewings per presentation flag: `three_d`, `hfr`, or `dbox`.
     pub viewings_by_flag: Vec<CountEntry>,
-    /// Viewings per rating (up, down, unrated).
+    /// Viewings per rating (up and down).
     pub ratings: RatingCounts,
     /// Viewings per genre name of the logged film, ascending.
     pub viewings_by_genre: Vec<CountEntry>,
     /// Total runtime of every viewing, in minutes (0 when unknown).
     pub total_runtime_minutes: u32,
-    /// The earliest `watched_at` across all logs, if any (RFC 3339).
-    pub first_viewed_at: Option<String>,
-    /// The latest `watched_at` across all logs, if any (RFC 3339).
-    pub last_viewed_at: Option<String>,
     /// Viewings flagged as a rewatch.
     pub rewatches: u32,
-    /// Top films by viewing count, descending (title as tie-break).
-    pub top_films: Vec<FilmViewings>,
 }
 
 /// Viewings broken down by rating.
@@ -403,8 +396,6 @@ pub struct RatingCounts {
     pub up: u32,
     /// Viewings rated thumbs down.
     pub down: u32,
-    /// Viewings left unrated.
-    pub unrated: u32,
 }
 
 /// Viewings broken down by venue.
@@ -422,15 +413,6 @@ pub struct YearCount {
     /// The UTC calendar year.
     pub year: i32,
     /// Viewings in that year.
-    pub count: u32,
-}
-
-/// A single film's viewing count, for ranked reports.
-#[derive(uniffi::Record, Clone, PartialEq, Eq, Debug)]
-pub struct FilmViewings {
-    /// Denormalized film title.
-    pub title: String,
-    /// Number of times this film has been watched.
     pub count: u32,
 }
 

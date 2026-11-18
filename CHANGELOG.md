@@ -86,6 +86,14 @@ example `## [0.1.0] - 2026-11-15`.
   Kotlin (2.2.10) replacing the `kotlin-android` plugin; `lintDebug` now passes,
   with uniffi's generated cleaner exempted from the reflection-blind `NewApi`
   check.
+- Stats tab: dropped the first/last-watched line, the most-watched-films table,
+  and the auditorium breakdown; ratings now show liked/disliked only as a pie
+  chart, projection family is a pie chart, year/month/weekday share one
+  switchable view (months labelled `June 2020`), and hourly viewings became four
+  time-of-day quadrants from midnight. Total runtime stays on the page.
+- The core `Stats` payload drops the now-unused fields (`first_viewed_at`,
+  `last_viewed_at`, `top_films`, `viewings_by_screen`, `ratings.unrated`) and
+  returns months oldest first as labelled rows.
 
 ### Removed
 

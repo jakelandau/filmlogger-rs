@@ -1,11 +1,24 @@
-// Aggregate statistics over all stored logs: cards, a meta line, the rating
-// breakdown, the client-side weekday/hour buckets, and every format/genre
-// breakdown. Inline CSS bars, no chart library.
+// Aggregate statistics over all stored logs: cards, the runtime line, pie
+// charts for ratings and projection family, the switchable year/month/weekday
+// timeline, the client-side time-of-day buckets, and the format/genre
+// breakdowns. Inline CSS bars and conic gradients, no chart library.
 import { el } from "../dom";
 import { getState } from "../app";
-import { hourCounts, weekdayCounts } from "../stats-time";
-import { formatDisplay } from "../time";
+import { timeOfDayCounts, weekdayCounts } from "../stats-time";
 import type { FormatCatalog, FormatOption, Stats } from "../types";
+
+/** Slice colors, shared with the Android stats screen. */
+const FAMILY_COLORS: Record<string, string> = {
+  dci: "#d489a4",
+  imax: "#8fc4e8",
+  film: "#ffb27a",
+  home: "#8fe3c0",
+};
+const RATING_UP_COLOR = "#8fe3c0";
+const RATING_DOWN_COLOR = "#e5484d";
+const FALLBACK_COLOR = "#9d95a3";
+
+type Slice = { label: string; count: number; color: string };
 
 export function renderStats(content: HTMLElement): void {
   const stats = getState().stats;
@@ -31,49 +44,25 @@ export function renderStats(content: HTMLElement): void {
   const meta = metaLine(stats);
   if (meta !== "") content.append(el("p", { class: "dim" }, meta));
 
-  const ratings = orderedBreakdown("Ratings", [
-    ["👍 Liked", stats.ratings.up],
-    ["👎 Disliked", stats.ratings.down],
-    ["Unrated", stats.ratings.unrated],
-  ]);
-
   content.append(
-    ratings,
-    orderedBreakdown("Viewings by month", descending(stats.viewings_by_month)),
-    orderedBreakdown("Viewings by weekday", weekdayCounts(getState().logs)),
-    orderedBreakdown("Viewings by hour", hourCounts(getState().logs)),
-    yearTable(stats),
-    breakdown("Viewings by projection family", stats.viewings_by_projection_family, (key) =>
-      familyLabel(key)
-    ),
-    breakdown("Viewings by auditorium", stats.viewings_by_screen, (key) =>
-      optionLabel(catalog === null ? null : Object.values(catalog.screens).flat(), key)
-    ),
+    pieSection("Ratings", ratingSlices(stats)),
+    timelineSection(stats),
+    orderedBreakdown("Viewings by time of day", timeOfDayCounts(getState().logs)),
+    pieSection("Viewings by projection family", familySlices(stats)),
     breakdown("Home viewings by medium", stats.viewings_by_medium, (key) =>
       optionLabel(catalog?.mediums ?? null, key)
     ),
     breakdown("Viewings by presentation flag", stats.viewings_by_flag, (key) =>
       optionLabel(catalog?.flag_labels ?? null, key)
     ),
-    orderedBreakdown("Top genres", topEntries(stats.viewings_by_genre, 10)),
-    topFilmsTable(stats)
+    orderedBreakdown("Top genres", topEntries(stats.viewings_by_genre, 10))
   );
 }
 
-/** `Time watched: … · First: … · Last: …`, each half omitted when unknown. */
+/** `Time watched: …`, omitted when no runtime is known. */
 function metaLine(stats: Stats): string {
-  if (stats.total_viewings === 0) return "";
-  const parts: string[] = [];
-  if (stats.total_runtime_minutes > 0) {
-    parts.push(`Time watched: ${formatDuration(stats.total_runtime_minutes)}`);
-  }
-  if (stats.first_viewed_at != null) {
-    parts.push(`First: ${formatDisplay(stats.first_viewed_at)}`);
-  }
-  if (stats.last_viewed_at != null) {
-    parts.push(`Last: ${formatDisplay(stats.last_viewed_at)}`);
-  }
-  return parts.join(" · ");
+  if (stats.total_viewings === 0 || stats.total_runtime_minutes === 0) return "";
+  return `Time watched: ${formatDuration(stats.total_runtime_minutes)}`;
 }
 
 /** `Xh Ym`, `Xh` on the hour, `Ym` under an hour. */
@@ -92,51 +81,116 @@ function topEntries(map: Record<string, number>, limit: number): [string, number
     .slice(0, limit);
 }
 
-/** A map's entries keyed in descending order (month keys sort lexically). */
-function descending(map: Record<string, number>): [string, number][] {
-  return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+/** Liked/disliked slices; both are listed once anything is rated. */
+function ratingSlices(stats: Stats): Slice[] {
+  if (stats.ratings.up + stats.ratings.down === 0) return [];
+  return [
+    { label: "👍 Liked", count: stats.ratings.up, color: RATING_UP_COLOR },
+    { label: "👎 Disliked", count: stats.ratings.down, color: RATING_DOWN_COLOR },
+  ];
 }
 
-function yearTable(stats: Stats): HTMLElement | string {
-  const years = Object.entries(stats.viewings_by_year)
-    .map(([year, count]) => [Number(year), count] as const)
-    .sort((a, b) => b[0] - a[0]);
-  if (years.length === 0) return "";
+/** One slice per projection family, count descending then key ascending. */
+function familySlices(stats: Stats): Slice[] {
+  return Object.entries(stats.viewings_by_projection_family)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([key, count]) => ({
+      label: familyLabel(key),
+      count,
+      color: FAMILY_COLORS[key] ?? FALLBACK_COLOR,
+    }));
+}
+
+type TimelineMode = "year" | "month" | "weekday";
+
+const TIMELINE_LABELS: Record<TimelineMode, string> = {
+  year: "Year",
+  month: "Month",
+  weekday: "Weekday",
+};
+
+const TIMELINE_ORDER: TimelineMode[] = ["year", "month", "weekday"];
+
+/** Year, month, and weekday viewings in one section, newest first. */
+function timelineSection(stats: Stats): HTMLElement | string {
+  const views: Record<TimelineMode, [string, number][]> = {
+    year: Object.entries(stats.viewings_by_year)
+      .map(([year, count]): [string, number] => [year, count])
+      .sort((a, b) => b[0].localeCompare(a[0])),
+    // The core orders months oldest first; show newest first like years.
+    month: [...stats.viewings_by_month]
+      .reverse()
+      .map((month): [string, number] => [month.month, month.count]),
+    weekday: weekdayCounts(getState().logs),
+  };
+  if (TIMELINE_ORDER.every((mode) => views[mode].length === 0)) return "";
+
+  let mode: TimelineMode = "year";
+  const body = el("div", { class: "breakdown-rows" });
+  const buttons = TIMELINE_ORDER.map((key) =>
+    el(
+      "button",
+      {
+        class: "chip" + (key === mode ? " active" : ""),
+        type: "button",
+        onclick: () => {
+          mode = key;
+          for (const button of buttons) {
+            button.classList.toggle("active", button.textContent === TIMELINE_LABELS[mode]);
+          }
+          body.replaceChildren(...barRows(views[mode]));
+        },
+      },
+      TIMELINE_LABELS[key]
+    )
+  );
+  body.append(...barRows(views[mode]));
   return el(
     "div",
     { class: "breakdown" },
-    el("h3", {}, "Viewings by year"),
-    el(
-      "table",
-      { class: "stats-table" },
-      el("thead", {}, el("tr", {}, el("th", {}, "Year"), el("th", {}, "Viewings"))),
-      el(
-        "tbody",
-        {},
-        ...years.map(([year, count]) =>
-          el("tr", {}, el("td", {}, String(year)), el("td", {}, String(count)))
-        )
-      )
-    )
+    el("h3", {}, "Viewings over time"),
+    el("div", { class: "chips" }, ...buttons),
+    body
   );
 }
 
-function topFilmsTable(stats: Stats): HTMLElement | string {
-  const films = stats.top_films.slice(0, 10);
-  if (films.length === 0) return "";
+/** A pie plus legend; omitted when there are no slices. */
+function pieSection(title: string, slices: Slice[]): HTMLElement | string {
+  const total = slices.reduce((sum, slice) => sum + slice.count, 0);
+  if (total === 0) return "";
+  let start = 0;
+  const stops: string[] = [];
+  for (const slice of slices) {
+    if (slice.count === 0) continue;
+    const end = start + (slice.count / total) * 100;
+    stops.push(`${slice.color} ${start}% ${end}%`);
+    start = end;
+  }
   return el(
     "div",
     { class: "breakdown" },
-    el("h3", {}, "Most watched"),
+    el("h3", {}, title),
     el(
-      "table",
-      { class: "stats-table" },
-      el("thead", {}, el("tr", {}, el("th", {}, "Film"), el("th", {}, "Times"))),
+      "div",
+      { class: "pie-row" },
+      el("div", {
+        class: "pie",
+        style: `background: conic-gradient(${stops.join(", ")})`,
+      }),
       el(
-        "tbody",
-        {},
-        ...films.map((f) =>
-          el("tr", {}, el("td", {}, f.title), el("td", {}, String(f.count)))
+        "div",
+        { class: "pie-legend" },
+        ...slices.map((slice) =>
+          el(
+            "div",
+            { class: "legend-row" },
+            el("span", {
+              class: "legend-swatch",
+              style: `background: ${slice.color}`,
+            }),
+            el("span", { class: "legend-label" }, slice.label),
+            el("span", { class: "legend-count" }, String(slice.count))
+          )
         )
       )
     )
@@ -179,30 +233,31 @@ function breakdown(
 /** A breakdown from already-ordered entries, keeping that order. */
 function orderedBreakdown(title: string, entries: [string, number][]): HTMLElement | string {
   if (entries.length === 0) return "";
-  const max = Math.max(...entries.map(([, count]) => count));
   return el(
     "div",
     { class: "breakdown" },
     el("h3", {}, title),
+    el("div", { class: "breakdown-rows" }, ...barRows(entries))
+  );
+}
+
+/** One proportional-bar row per entry, scaled to the largest count. */
+function barRows(entries: [string, number][]): HTMLElement[] {
+  const max = Math.max(...entries.map(([, count]) => count));
+  return entries.map(([label, count]) =>
     el(
       "div",
-      { class: "breakdown-rows" },
-      ...entries.map(([label, count]) =>
-        el(
-          "div",
-          { class: "breakdown-row" },
-          el("span", { class: "breakdown-label" }, label),
-          el(
-            "span",
-            { class: "bar-track" },
-            el("span", {
-              class: "bar-fill",
-              style: `width: ${max === 0 ? 0 : (count / max) * 100}%`,
-            })
-          ),
-          el("span", { class: "breakdown-count" }, String(count))
-        )
-      )
+      { class: "breakdown-row" },
+      el("span", { class: "breakdown-label" }, label),
+      el(
+        "span",
+        { class: "bar-track" },
+        el("span", {
+          class: "bar-fill",
+          style: `width: ${max === 0 ? 0 : (count / max) * 100}%`,
+        })
+      ),
+      el("span", { class: "breakdown-count" }, String(count))
     )
   );
 }

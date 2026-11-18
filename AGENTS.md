@@ -45,7 +45,7 @@ Desktop bridge: `apps/desktop/src-tauri/src/lib.rs` holds the Tauri commands,
 `run_blocking`, and app bootstrap; `src/contract_tests.rs` checks the command
 list against `generate_handler!` and `api.ts`; `ui/src/api.ts` is the sole IPC
 wrapper; `ui/src/types.ts` mirrors the Rust serde shapes; `ui/src/stats-time.ts`
-computes the weekday/hour buckets.
+computes the weekday/time-of-day buckets.
 
 Android bridge: `apps/android/rust/src/{lib,types,convert}.rs` hold the uniffi
 surface, DTOs, and conversions; screens live in
@@ -65,14 +65,18 @@ it is not a second app-facing API.
 2. Desktop and Android parity: the same content, actions, strings, and computed
    values on every screen; only native chrome, widget type, and layout differ.
    Any user-visible change updates both platforms and both test suites.
-3. Exception to (1): weekday and hour-of-day stats are computed client-side in
+3. Exception to (1): weekday and time-of-day stats are computed client-side in
    each log's own time zone because the core aggregates the other dimensions in
    UTC. `apps/desktop/ui/src/stats-time.ts` and
    `apps/android/app/src/main/kotlin/ca/jakelandau/filmlogger/ui/StatsTime.kt`
-   implement the same contract: Monday-first weekdays, `HH:00` hour labels,
+   implement the same contract: Monday-first weekdays, four time-of-day
+   quadrants (`00:00–06:00`, `06:00–12:00`, `12:00–18:00`, `18:00–24:00`),
    empty buckets omitted, unknown time zone falls back to the device zone, and
    invalid or missing timestamps are skipped. Change both implementations plus
-   `stats-time.test.ts` and `StatsTimeTest.kt`.
+   `stats-time.test.ts` and `StatsTimeTest.kt`. Core month stats are also UTC:
+   `Stats::viewings_by_month` returns oldest-first `MonthViewings` whose
+   `month` is the display label (for example `June 2020`); clients reverse the
+   list for display.
 4. Every watch log has a valid format. `WatchLog::validate()` requires a format
    and a matching venue; `Format::validate()` enforces projection/screen/flag
    and home-medium/flag legality (`ProjectionScreenMismatch`, `FlagMismatch`,

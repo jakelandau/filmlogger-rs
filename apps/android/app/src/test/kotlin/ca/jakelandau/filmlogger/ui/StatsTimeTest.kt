@@ -48,22 +48,22 @@ class StatsTimeTest {
     }
 
     @Test
-    fun hoursBucketInTheLogsZoneAscending() {
+    fun timeOfDayBucketsInTheLogsZoneMidnightFirst() {
         assertEquals(
-            listOf("09:00" to 1, "21:00" to 3),
-            hourCounts(fixtures),
+            listOf("06:00–12:00" to 1, "18:00–24:00" to 3),
+            timeOfDayCounts(fixtures),
         )
     }
 
     @Test
     fun unknownZoneFallsBackToTheDeviceZone() {
         assertEquals(1, weekdayCounts(listOf(log("2026-11-16T02:30:00Z", "Not/AZone"))).sumOf { it.second })
-        assertEquals(1, hourCounts(listOf(log("2026-11-16T02:30:00Z", null))).size)
+        assertEquals(1, timeOfDayCounts(listOf(log("2026-11-16T02:30:00Z", null))).size)
     }
 
     @Test
     fun unparseableTimestampsAreSkipped() {
         assertEquals(emptyList<Pair<String, Int>>(), weekdayCounts(listOf(log("not-a-date"))))
-        assertEquals(emptyList<Pair<String, Int>>(), hourCounts(listOf(log("not-a-date"))))
+        assertEquals(emptyList<Pair<String, Int>>(), timeOfDayCounts(listOf(log("not-a-date"))))
     }
 }

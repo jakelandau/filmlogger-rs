@@ -82,6 +82,10 @@ example `## [0.1.0] - 2026-11-15`.
   cards render; full metadata loads with a film page.
 - Android now takes its format keys and film keys from the Rust core instead of
   its own tables, so a core key change cannot leave the app behind.
+- Android toolchain upgraded to Gradle 9.9.1 and AGP 9.5.1, with AGP's built-in
+  Kotlin (2.2.10) replacing the `kotlin-android` plugin; `lintDebug` now passes,
+  with uniffi's generated cleaner exempted from the reflection-blind `NewApi`
+  check.
 
 ### Removed
 

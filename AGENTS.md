@@ -17,9 +17,12 @@ Workspace facts: resolver 3, Rust edition 2024, MSRV 1.85, license
 AGPL-3.0-or-later, workspace lints `unsafe_code = "warn"` and
 `clippy::pedantic = "warn"`.
 
-Android toolchain facts: AGP 8.10.1, Kotlin 2.0.21, Gradle 8.11.1, compileSdk
-37, minSdk 26, JDK 21 (Gradle JVM via `gradle.properties`, compiler target JVM
-17), arm64-v8a only, uniffi 0.32. CI uses Node 22.
+Android toolchain facts: Gradle 9.9.1, AGP 9.5.1, compileSdk 37, minSdk 26,
+JDK 21 (Gradle JVM via `gradle.properties`, compiler target JVM 17), arm64-v8a
+only, uniffi 0.32. Kotlin is AGP's built-in Kotlin (KGP 2.2.10): do not apply
+`org.jetbrains.kotlin.android`, and keep the Compose compiler plugin
+(`org.jetbrains.kotlin.plugin.compose`) at the built-in Kotlin version. CI uses
+Node 22.
 
 Native storage: desktop opens `<app_config_dir>/watch_log.db`; Android opens
 `<filesDir>/film_logger.db`. Both use the same schema version, and these

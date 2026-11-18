@@ -2,7 +2,6 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -80,23 +79,15 @@ android {
     }
 
     lint {
-        // `MainActivity` extends `androidx.activity.ComponentActivity`, whose
-        // superclass chain is Kotlin. AGP 8.10.1's `Instantiatable` hierarchy
-        // check fails to resolve that chain and reports a false positive; the
-        // activity is public, has an empty constructor, and ultimately extends
-        // `android.app.Activity`, so it is instantiable.
-        disable.add("Instantiatable")
+        lintConfig = file("lint.xml")
     }
 
     // The arm64 cdylib is copied here by `copyNativeLib` (see below).
     sourceSets["main"].jniLibs.srcDir(file("build/generated/jniLibs"))
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
-    }
-}
+// Built-in Kotlin defaults `jvmTarget` to `compileOptions.targetCompatibility`
+// (17 above), so no `kotlin { compilerOptions { ... } }` block is needed.
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -212,11 +203,8 @@ val copyNativeLib = tasks.register<Copy>("copyNativeLib") {
     dependsOn(buildArmCdylib)
 }
 
-// Generate the Kotlin bindings before any Kotlin is compiled; copy the native
-// library in before the variant is packaged.
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    dependsOn(generateKotlin)
-}
+// Generate the Kotlin bindings and stage the native library before any
+// variant task runs (built-in Kotlin has no `KotlinCompile` task to hook).
 tasks.named("preBuild") {
-    dependsOn(copyNativeLib)
+    dependsOn(generateKotlin, copyNativeLib)
 }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- uniffi's generated cleaner probes `java.lang.ref.Cleaner` (API 33) via
+         `Class.forName` and falls back to the JNA cleaner when the class is
+         absent, so API 26-32 never touch it. Lint cannot see through the
+         reflection guard. The file is generated build output and must not be
+         edited, so the check is ignored for that package only. -->
+    <issue id="NewApi">
+        <ignore regexp="uniffi/filmlogger_rs_ffi/" />
+    </issue>
+</lint>

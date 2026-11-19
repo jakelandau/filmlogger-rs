@@ -278,7 +278,7 @@ private fun LogRow(
                     Spacer(Modifier.height(RowGap))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (cert != null) {
-                            CertificationIcon(selectedBoard, cert, size = 22.dp)
+                            CertificationIcon(selectedBoard, cert, size = 26.dp)
                             Spacer(Modifier.width(6.dp))
                         }
                         Text(
@@ -287,9 +287,20 @@ private fun LogRow(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         log.rating?.let { rating ->
-                            Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.width(10.dp))
                             Text(
-                                ratingText(rating),
+                                "·",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                ratingEmoji(rating),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                ratingLabel(rating),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -311,7 +322,12 @@ private fun venueText(venue: Venue): String = when (venue) {
     Venue.HOME -> "🏠 Home"
 }
 
-private fun ratingText(rating: Rating): String = when (rating) {
-    Rating.UP -> "👍 Liked"
-    Rating.DOWN -> "👎 Disliked"
+private fun ratingEmoji(rating: Rating): String = when (rating) {
+    Rating.UP -> "👍"
+    Rating.DOWN -> "👎"
+}
+
+private fun ratingLabel(rating: Rating): String = when (rating) {
+    Rating.UP -> "Liked"
+    Rating.DOWN -> "Disliked"
 }

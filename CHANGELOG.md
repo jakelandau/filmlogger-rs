@@ -95,8 +95,9 @@ example `## [0.1.0] - 2026-11-15`.
   `last_viewed_at`, `top_films`, `viewings_by_screen`, `ratings.unrated`) and
   returns months oldest first as labelled rows.
 - Log rows put the venue and format information on one line, render the
-  certification and liked/disliked reaction larger, and let every line from the
-  date down span the full row width beneath the edit action.
+  certification symbol and the thumbs up/down emoji larger with a dot separator,
+  and let every line from the date down span the full row width beneath the edit
+  action.
 
 ### Removed
 

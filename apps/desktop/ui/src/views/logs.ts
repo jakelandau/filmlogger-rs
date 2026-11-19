@@ -201,7 +201,11 @@ function certificationBadge(region: string, cert: string | null): HTMLElement {
 
 function renderRow(log: WatchLog): HTMLElement {
   const rating =
-    log.rating === "up" ? "👍 Liked" : log.rating === "down" ? "👎 Disliked" : null;
+    log.rating === "up"
+      ? { emoji: "👍", label: "Liked" }
+      : log.rating === "down"
+        ? { emoji: "👎", label: "Disliked" }
+        : null;
   const board = getState().settings.selected_board;
   const cert = certificationFor(log, board);
   const venue = log.venue === "theatre" ? "🎭 Theatre" : "🏠 Home";
@@ -251,7 +255,15 @@ function renderRow(log: WatchLog): HTMLElement {
         "div",
         { class: "log-meta" },
         certificationBadge(board, cert),
-        rating ? el("span", { class: "rating" }, rating) : ""
+        rating
+          ? el(
+              "span",
+              { class: "rating" },
+              el("span", { class: "meta-dot" }, "·"),
+              el("span", { class: "rating-emoji" }, rating.emoji),
+              " " + rating.label
+            )
+          : ""
       )
     )
   );

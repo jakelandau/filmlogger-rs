@@ -225,10 +225,15 @@ function renderRow(log: WatchLog): HTMLElement {
       { class: "log-main" },
       el(
         "div",
-        { class: "log-title" },
-        log.title,
-        log.release_year != null ? el("span", { class: "dim" }, ` (${log.release_year})`) : "",
-        log.rewatch ? el("span", { class: "badge rewatch" }, "Rewatch") : ""
+        { class: "log-title-row" },
+        el(
+          "div",
+          { class: "log-title" },
+          log.title,
+          log.release_year != null ? el("span", { class: "dim" }, ` (${log.release_year})`) : "",
+          log.rewatch ? el("span", { class: "badge rewatch" }, "Rewatch") : ""
+        ),
+        actions
       ),
       el(
         "div",
@@ -248,8 +253,7 @@ function renderRow(log: WatchLog): HTMLElement {
         certificationBadge(board, cert),
         rating ? el("span", { class: "rating" }, rating) : ""
       )
-    ),
-    actions
+    )
   );
 }
 

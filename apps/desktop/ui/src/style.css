@@ -100,7 +100,7 @@ h3 {
 .log-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
@@ -114,8 +114,18 @@ h3 {
   min-width: 0;
 }
 
+/* The edit action sits on the title line so every line below can use the full
+   width of the row, including the space under the button. */
+.log-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .log-title {
   font-weight: 600;
+  min-width: 0;
 }
 
 .log-sub {
@@ -128,6 +138,21 @@ h3 {
   align-items: center;
   gap: 10px;
   font-size: 13px;
+}
+
+.log-meta .badge {
+  font-size: 14px;
+  padding: 2px 8px;
+}
+
+.log-meta .rating {
+  font-size: 15px;
+}
+
+.log-meta .cert-icon {
+  width: 20px;
+  height: 20px;
+  vertical-align: -4px;
 }
 
 .format-family {

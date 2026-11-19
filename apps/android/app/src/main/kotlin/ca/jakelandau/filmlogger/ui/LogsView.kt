@@ -246,6 +246,8 @@ private fun LogRow(
                         )
                     }
                     Spacer(Modifier.height(2.dp))
+                    // Date, venue, and format information share one line,
+                    // matching the desktop row.
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(InlineGap),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -260,14 +262,6 @@ private fun LogRow(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                    }
-
-                    // Row 2: format information.
-                    Spacer(Modifier.height(RowGap))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(InlineGap),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
                         FormatFamilyBadge(log.format)
                         Text(
                             log.formatSummary.ifEmpty { "—" },
@@ -280,23 +274,23 @@ private fun LogRow(
                         FormatFlagsRow(log.format)
                     }
 
-                    // Row 3: content rating and reaction.
+                    // Row 2: content rating and reaction.
                     Spacer(Modifier.height(RowGap))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (cert != null) {
-                            CertificationIcon(selectedBoard, cert)
-                            Spacer(Modifier.width(4.dp))
+                            CertificationIcon(selectedBoard, cert, size = 22.dp)
+                            Spacer(Modifier.width(6.dp))
                         }
                         Text(
                             cert ?: "Unrated",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         log.rating?.let { rating ->
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 ratingText(rating),
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }

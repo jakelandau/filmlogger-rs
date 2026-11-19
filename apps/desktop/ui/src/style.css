@@ -736,6 +736,11 @@ select {
   gap: 4px;
 }
 
+/* Match the subheader-to-chips gap below the timeline chips. */
+.chips + .breakdown-rows {
+  margin-top: 12px;
+}
+
 .breakdown-row {
   display: grid;
   grid-template-columns: 160px 1fr 42px;

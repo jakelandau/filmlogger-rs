@@ -1,14 +1,22 @@
 package ca.jakelandau.filmlogger.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -59,4 +67,28 @@ fun BoardFlagIcon(region: String) {
         contentDescription = null,
         modifier = Modifier.size(18.dp),
     )
+}
+
+/**
+ * The board symbol (or its text fallback) on the shared light panel; log rows
+ * and the film page use the same size and fallback rules.
+ */
+@Composable
+fun CertificationBadge(region: String, rating: String, height: Dp = 34.dp) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color.White.copy(alpha = 0.18f))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        if (certificationIconUrl(region, rating) != null) {
+            CertificationIcon(region, rating, height)
+        } else {
+            Text(
+                rating,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

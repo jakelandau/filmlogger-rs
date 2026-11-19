@@ -106,7 +106,7 @@ example `## [0.1.0] - 2026-11-15`.
   and a same-height thumbs emoji separated by a dot with equal space on both
   sides, and no text labels (a text fallback remains for boards with no bundled
   symbol). The rating symbol sits on a translucent light panel, lighter than the
-  row/card surface.
+  row/card surface, and the film page uses the same badge size and fallback.
 
 ### Removed
 

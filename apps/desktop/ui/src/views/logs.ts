@@ -6,7 +6,7 @@ import { formatDisplay } from "../time";
 import { formatFamilyBadge } from "../format-family";
 import { formatFlagsRow } from "../format-flags";
 import { applyFilter, defaultFilter, type LogFilter } from "../filters";
-import { certificationIcon } from "../cert-icons";
+import { certificationBadge } from "../cert-badge";
 import { icon } from "../icons";
 import type { WatchLog } from "../types";
 
@@ -174,28 +174,6 @@ function renderFilterBar(): HTMLElement {
 /// when unknown (the film has no certifications for that board).
 function certificationFor(log: WatchLog, board: string): string | null {
   return log.certifications?.[board.toUpperCase()] ?? null;
-}
-
-function certificationBadge(region: string, cert: string | null): HTMLElement | null {
-  if (cert == null) return null;
-  const badge = el("span", { class: "cert-badge" });
-  const icon = certificationIcon(region, cert);
-  if (icon == null) {
-    // No bundled symbol for this board/rating: keep the value visible.
-    badge.append(cert);
-    return badge;
-  }
-  badge.append(
-    el("img", {
-      class: "cert-icon",
-      src: icon,
-      alt: cert,
-      onerror: (e: Event) => {
-        (e.currentTarget as HTMLImageElement).style.display = "none";
-      },
-    })
-  );
-  return badge;
 }
 
 function renderRow(log: WatchLog): HTMLElement {

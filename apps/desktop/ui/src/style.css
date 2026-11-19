@@ -147,7 +147,7 @@ h3 {
   font-size: 15px;
 }
 
-.log-meta .cert-icon {
+.cert-badge .cert-icon {
   height: 34px;
   width: auto;
   vertical-align: -9px;
@@ -260,18 +260,6 @@ h3 {
   object-fit: contain;
   vertical-align: -3px;
   margin-right: 2px;
-}
-
-.certifications {
-  font-size: 16px;
-  color: var(--fg);
-}
-
-.certifications .cert-icon {
-  height: 30px;
-  width: auto;
-  vertical-align: -8px;
-  margin-left: 0;
 }
 
 .row-actions {

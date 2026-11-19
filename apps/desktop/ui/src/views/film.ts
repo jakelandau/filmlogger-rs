@@ -5,7 +5,7 @@ import { api } from "../api";
 import { getState, go, reload, showError } from "../app";
 import { formatDisplay } from "../time";
 import { startAddForFilm } from "./add";
-import { certificationIcon } from "../cert-icons";
+import { certificationBadge } from "../cert-badge";
 import { formatFamilyBadge } from "../format-family";
 import { formatFlagsRow } from "../format-flags";
 import type { Certifications, FilmPage, FilmStats } from "../types";
@@ -92,24 +92,7 @@ function renderHeader(page: FilmPage): HTMLElement {
 }
 
 function certificationsLine(certs: Certifications | null, region: string): HTMLElement | null {
-  const rating = certs?.[region];
-  if (rating == null) return null;
-  const line = el("div", { class: "certifications" });
-  const icon = certificationIcon(region, rating);
-  if (icon != null) {
-    line.append(
-      el("img", {
-        class: "cert-icon",
-        src: icon,
-        alt: "",
-        onerror: (e: Event) => {
-          (e.currentTarget as HTMLImageElement).style.display = "none";
-        },
-      })
-    );
-  }
-  line.append(`${region} ${rating}`);
-  return line;
+  return certificationBadge(region, certs?.[region] ?? null);
 }
 
 function renderActions(page: FilmPage): HTMLElement {

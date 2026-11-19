@@ -24,12 +24,12 @@ fun certificationIconUrl(region: String, rating: String): String? {
 }
 
 @Composable
-fun CertificationIcon(region: String, rating: String, size: Dp = 18.dp) {
+fun CertificationIcon(region: String, rating: String, height: Dp = 18.dp, width: Dp = height) {
     val url = certificationIconUrl(region, rating) ?: return
     AsyncImage(
         model = url,
         contentDescription = null,
-        modifier = Modifier.size(size),
+        modifier = Modifier.size(width = width, height = height),
     )
 }
 

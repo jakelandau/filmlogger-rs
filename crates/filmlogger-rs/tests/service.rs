@@ -337,7 +337,7 @@ fn stats_breakdowns() {
     let stats = logger.stats().unwrap();
     assert_eq!(stats.viewings_by_projection_family.get("dci"), Some(&1));
     assert_eq!(stats.viewings_by_projection_family.get("imax"), Some(&1));
-    assert_eq!(stats.viewings_by_projection_family.get("home"), Some(&1));
+    assert_eq!(stats.viewings_by_projection_family.get("home"), None);
     assert_eq!(stats.viewings_by_medium.get("bluray"), Some(&1));
     assert_eq!(stats.viewings_by_flag.get("three_d"), Some(&2));
     assert_eq!(

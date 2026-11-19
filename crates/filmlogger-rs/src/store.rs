@@ -1111,8 +1111,10 @@ fn insert_film_row(
     Ok(conn.execute(&sql, rusqlite::params_from_iter(values))?)
 }
 
-/// Add one log's format to the family, medium, and flag breakdowns. Logs with
-/// no stored format contribute nothing.
+/// Add one log's format to the projection-family (theatre only), release
+/// medium, and flag breakdowns. Logs with no stored format contribute nothing.
+/// Home viewings have no projection family: the venue cards already separate
+/// theatre from home.
 fn count_format(
     format: Option<&Format>,
     by_family: &mut BTreeMap<String, usize>,
@@ -1141,7 +1143,6 @@ fn count_format(
             three_d,
             hfr,
         }) => {
-            *by_family.entry("home".to_string()).or_default() += 1;
             *by_medium.entry(medium.key().to_string()).or_default() += 1;
             for (key, on) in [("three_d", *three_d), ("hfr", *hfr)] {
                 if on {
@@ -1203,7 +1204,7 @@ pub struct Stats {
     pub viewings_by_year: BTreeMap<i32, usize>,
     /// Viewings by UTC calendar month, oldest first.
     pub viewings_by_month: Vec<MonthViewings>,
-    /// Viewings by projection family: `dci`, `imax`, `film`, or `home`.
+    /// Theatre viewings by projection family: `dci`, `imax`, or `film`.
     pub viewings_by_projection_family: BTreeMap<String, usize>,
     /// Home viewings by release medium.
     pub viewings_by_medium: BTreeMap<String, usize>,

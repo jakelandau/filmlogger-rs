@@ -373,7 +373,7 @@ pub struct Stats {
     /// Viewings by UTC calendar month, oldest first; `key` is the display
     /// label (for example `"June 2020"`).
     pub viewings_by_month: Vec<CountEntry>,
-    /// Viewings by projection family: `dci`, `imax`, `film`, or `home`.
+    /// Theatre viewings by projection family: `dci`, `imax`, or `film`.
     pub viewings_by_projection_family: Vec<CountEntry>,
     /// Home viewings by release medium.
     pub viewings_by_medium: Vec<CountEntry>,

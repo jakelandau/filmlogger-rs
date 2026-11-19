@@ -12,7 +12,6 @@ const FAMILY_COLORS: Record<string, string> = {
   dci: "#d489a4",
   imax: "#8fc4e8",
   film: "#ffb27a",
-  home: "#8fe3c0",
 };
 const RATING_UP_COLOR = "#8fe3c0";
 const RATING_DOWN_COLOR = "#e5484d";
@@ -205,8 +204,6 @@ function familyLabel(key: string): string {
       return "IMAX";
     case "film":
       return "Film";
-    case "home":
-      return "Home";
     default:
       return key;
   }

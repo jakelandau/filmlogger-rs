@@ -177,7 +177,7 @@ function certificationFor(log: WatchLog, board: string): string | null {
 }
 
 function certificationBadge(region: string, cert: string | null): HTMLElement {
-  const badge = el("span", { class: "badge" + (cert ? "" : " unrated") });
+  const badge = el("span", { class: "cert-badge" + (cert ? "" : " unrated") });
   if (cert == null) {
     badge.append("Unrated");
     return badge;

@@ -44,7 +44,6 @@ private val FAMILY_COLORS = mapOf(
     "dci" to Color(0xFFD489A4),
     "imax" to Color(0xFF8FC4E8),
     "film" to Color(0xFFFFB27A),
-    "home" to Color(0xFF8FE3C0),
 )
 private val FALLBACK_COLOR = Color(0xFF9D95A3)
 private val RATING_UP_COLOR = Color(0xFF8FE3C0)
@@ -195,7 +194,6 @@ private fun familyLabel(key: String): String = when (key) {
     "dci" -> "Digital (DCI)"
     "imax" -> "IMAX"
     "film" -> "Film"
-    "home" -> "Home"
     else -> key
 }
 

@@ -278,7 +278,7 @@ private fun LogRow(
                     Spacer(Modifier.height(RowGap))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (cert != null) {
-                            CertificationIcon(selectedBoard, cert, size = 26.dp)
+                            CertificationIcon(selectedBoard, cert, height = 34.dp, width = 70.dp)
                             Spacer(Modifier.width(6.dp))
                         }
                         Text(

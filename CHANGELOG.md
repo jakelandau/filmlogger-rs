@@ -98,6 +98,10 @@ example `## [0.1.0] - 2026-11-15`.
   certification symbol and the thumbs up/down emoji larger with a dot separator,
   and let every line from the date down span the full row width beneath the edit
   action.
+- The projection-family pie no longer counts home viewings (the venue cards
+  already separate theatre from home), and the certification badge lost its dark
+  pill: the symbol is sized by height with its natural width, so wide boards like
+  MPA PG-13 stay legible on both platforms.
 
 ### Removed
 

@@ -274,7 +274,7 @@ private fun CertificationLine(certs: Certifications?, region: String) {
     val value = certs?.values?.firstOrNull { it.region == region } ?: return
     Spacer(Modifier.height(6.dp))
     Row(verticalAlignment = Alignment.CenterVertically) {
-        CertificationIcon(value.region, value.rating, height = 30.dp, width = 62.dp)
+        CertificationIcon(value.region, value.rating, height = 30.dp)
         Spacer(Modifier.width(8.dp))
         Text(
             "${value.region} ${value.rating}",

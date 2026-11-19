@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,6 +49,9 @@ private val CardPadding = 16.dp
 private val PosterGap = 16.dp
 private val RowGap = 6.dp
 private val InlineGap = 6.dp
+
+/** Light panel behind the age-rating symbol, shared with desktop. */
+private val CertificationBackground = Color(0xFF3B3641)
 
 /** The log list: every recorded viewing, filterable and sortable. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -281,16 +285,26 @@ private fun LogRow(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (cert != null) {
                                 if (certificationIconUrl(selectedBoard, cert) != null) {
-                                    CertificationIcon(
-                                        selectedBoard,
-                                        cert,
-                                        height = 34.dp,
-                                        width = 70.dp,
-                                    )
+                                    Box(
+                                        Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(CertificationBackground)
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    ) {
+                                        CertificationIcon(
+                                            selectedBoard,
+                                            cert,
+                                            height = 34.dp,
+                                        )
+                                    }
                                 } else {
                                     // No bundled symbol: keep the value visible.
                                     Text(
                                         cert,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(CertificationBackground)
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -298,13 +312,12 @@ private fun LogRow(
                             }
                             log.rating?.let { rating ->
                                 if (cert != null) {
-                                    Spacer(Modifier.width(10.dp))
                                     Text(
                                         "·",
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    Spacer(Modifier.width(10.dp))
+                                    Spacer(Modifier.width(8.dp))
                                 }
                                 Text(
                                     ratingEmoji(rating),

@@ -104,7 +104,8 @@ example `## [0.1.0] - 2026-11-15`.
   MPA PG-13 stay legible on both platforms.
 - Log rows now show the age rating and reaction as images only: the rating SVG
   and a same-height thumbs emoji separated by a dot, with no text labels (a text
-  fallback remains for boards with no bundled symbol).
+  fallback remains for boards with no bundled symbol). The rating symbol sits on
+  a light panel and the dot follows it immediately.
 
 ### Removed
 

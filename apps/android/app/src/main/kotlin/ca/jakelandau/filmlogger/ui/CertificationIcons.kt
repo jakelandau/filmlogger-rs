@@ -1,11 +1,18 @@
 package ca.jakelandau.filmlogger.ui
 
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 
 // Official rating symbols bundled from Wikimedia Commons. Boards without an
 // official symbol for a value render text only; flags remain the board-level
@@ -24,12 +31,24 @@ fun certificationIconUrl(region: String, rating: String): String? {
 }
 
 @Composable
-fun CertificationIcon(region: String, rating: String, height: Dp = 18.dp, width: Dp = height) {
+fun CertificationIcon(region: String, rating: String, height: Dp = 18.dp) {
     val url = certificationIconUrl(region, rating) ?: return
+    // The SVG aspect is unknown until it decodes; start at 2:1 (the widest
+    // common board, e.g. MPA PG-13 at 1.97:1) and correct after decode so the
+    // image box hugs the symbol instead of padding it with empty space.
+    var aspect by remember(url) { mutableStateOf(2f) }
     AsyncImage(
         model = url,
         contentDescription = null,
-        modifier = Modifier.size(width = width, height = height),
+        modifier = Modifier.height(height).width(height * aspect),
+        onState = { state ->
+            if (state is AsyncImagePainter.State.Success) {
+                val size = state.painter.intrinsicSize
+                if (size.height > 0f) {
+                    aspect = size.width / size.height
+                }
+            }
+        },
     )
 }
 

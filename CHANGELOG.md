@@ -103,9 +103,10 @@ example `## [0.1.0] - 2026-11-15`.
   pill: the symbol is sized by height with its natural width, so wide boards like
   MPA PG-13 stay legible on both platforms.
 - Log rows now show the age rating and reaction as images only: the rating SVG
-  and a same-height thumbs emoji separated by a dot, with no text labels (a text
-  fallback remains for boards with no bundled symbol). The rating symbol sits on
-  a light panel and the dot follows it immediately.
+  and a same-height thumbs emoji separated by a dot with equal space on both
+  sides, and no text labels (a text fallback remains for boards with no bundled
+  symbol). The rating symbol sits on a translucent light panel, lighter than the
+  row/card surface.
 
 ### Removed
 

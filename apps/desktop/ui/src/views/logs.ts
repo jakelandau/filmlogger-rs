@@ -215,7 +215,6 @@ function renderRow(log: WatchLog): HTMLElement {
     if (certBadge != null) meta.push(el("span", { class: "meta-dot" }, "·"));
     meta.push(el("span", { class: "rating" }, el("span", { class: "rating-emoji" }, ratingEmoji)));
   }
-
   const actions = el(
     "span",
     { class: "row-actions" },

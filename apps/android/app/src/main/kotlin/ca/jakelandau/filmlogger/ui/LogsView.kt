@@ -50,8 +50,8 @@ private val PosterGap = 16.dp
 private val RowGap = 6.dp
 private val InlineGap = 6.dp
 
-/** Light panel behind the age-rating symbol, shared with desktop. */
-private val CertificationBackground = Color(0xFF3B3641)
+/** Light panel behind the age-rating symbol, lighter than the card surface. */
+private val CertificationBackground = Color.White.copy(alpha = 0.18f)
 
 /** The log list: every recorded viewing, filterable and sortable. */
 @OptIn(ExperimentalLayoutApi::class)
@@ -312,6 +312,7 @@ private fun LogRow(
                             }
                             log.rating?.let { rating ->
                                 if (cert != null) {
+                                    Spacer(Modifier.width(8.dp))
                                     Text(
                                         "·",
                                         style = MaterialTheme.typography.bodyLarge,

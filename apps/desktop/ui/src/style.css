@@ -159,7 +159,7 @@ h3 {
 }
 
 .log-meta .rating-emoji {
-  font-size: 22px;
+  font-size: 34px;
   line-height: 1;
 }
 
@@ -249,10 +249,6 @@ h3 {
   align-items: center;
   gap: 6px;
   font-size: 14px;
-}
-
-.cert-badge.unrated {
-  color: var(--muted);
 }
 
 .cert-icon {

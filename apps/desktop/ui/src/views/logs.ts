@@ -176,36 +176,31 @@ function certificationFor(log: WatchLog, board: string): string | null {
   return log.certifications?.[board.toUpperCase()] ?? null;
 }
 
-function certificationBadge(region: string, cert: string | null): HTMLElement {
-  const badge = el("span", { class: "cert-badge" + (cert ? "" : " unrated") });
-  if (cert == null) {
-    badge.append("Unrated");
+function certificationBadge(region: string, cert: string | null): HTMLElement | null {
+  if (cert == null) return null;
+  const badge = el("span", { class: "cert-badge" });
+  const icon = certificationIcon(region, cert);
+  if (icon == null) {
+    // No bundled symbol for this board/rating: keep the value visible.
+    badge.append(cert);
     return badge;
   }
-  const icon = certificationIcon(region, cert);
-  if (icon != null) {
-    badge.append(
-      el("img", {
-        class: "cert-icon",
-        src: icon,
-        alt: "",
-        onerror: (e: Event) => {
-          (e.currentTarget as HTMLImageElement).style.display = "none";
-        },
-      })
-    );
-  }
-  badge.append(" " + cert);
+  badge.append(
+    el("img", {
+      class: "cert-icon",
+      src: icon,
+      alt: cert,
+      onerror: (e: Event) => {
+        (e.currentTarget as HTMLImageElement).style.display = "none";
+      },
+    })
+  );
   return badge;
 }
 
 function renderRow(log: WatchLog): HTMLElement {
-  const rating =
-    log.rating === "up"
-      ? { emoji: "👍", label: "Liked" }
-      : log.rating === "down"
-        ? { emoji: "👎", label: "Disliked" }
-        : null;
+  const ratingEmoji =
+    log.rating === "up" ? "👍" : log.rating === "down" ? "👎" : null;
   const board = getState().settings.selected_board;
   const cert = certificationFor(log, board);
   const venue = log.venue === "theatre" ? "🎭 Theatre" : "🏠 Home";
@@ -213,6 +208,13 @@ function renderRow(log: WatchLog): HTMLElement {
     ? el("img", { class: "poster", src: IMAGE_BASE + log.poster_path, alt: "" })
     : el("div", { class: "poster placeholder" });
   const family = formatFamilyBadge(log.format);
+  const certBadge = certificationBadge(board, cert);
+  const meta: (HTMLElement | string)[] = [];
+  if (certBadge != null) meta.push(certBadge);
+  if (ratingEmoji != null) {
+    if (certBadge != null) meta.push(el("span", { class: "meta-dot" }, "·"));
+    meta.push(el("span", { class: "rating" }, el("span", { class: "rating-emoji" }, ratingEmoji)));
+  }
 
   const actions = el(
     "span",
@@ -251,20 +253,7 @@ function renderRow(log: WatchLog): HTMLElement {
         el("span", { class: "dim" }, log.format_summary || "—")
       ),
       formatFlagsRow(log.format),
-      el(
-        "div",
-        { class: "log-meta" },
-        certificationBadge(board, cert),
-        rating
-          ? el(
-              "span",
-              { class: "rating" },
-              el("span", { class: "meta-dot" }, "·"),
-              el("span", { class: "rating-emoji" }, rating.emoji),
-              " " + rating.label
-            )
-          : ""
-      )
+      meta.length === 0 ? "" : el("div", { class: "log-meta" }, ...meta)
     )
   );
 }

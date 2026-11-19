@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ca.jakelandau.filmlogger.R
 import coil.compose.AsyncImage
 import uniffi.filmlogger_rs_ffi.Rating
@@ -274,36 +275,43 @@ private fun LogRow(
                         FormatFlagsRow(log.format)
                     }
 
-                    // Row 2: content rating and reaction.
-                    Spacer(Modifier.height(RowGap))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (cert != null) {
-                            CertificationIcon(selectedBoard, cert, height = 34.dp, width = 70.dp)
-                            Spacer(Modifier.width(6.dp))
-                        }
-                        Text(
-                            cert ?: "Unrated",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        log.rating?.let { rating ->
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                "·",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                ratingEmoji(rating),
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                ratingLabel(rating),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
+                    // Row 2: content rating and reaction, as images only.
+                    if (cert != null || log.rating != null) {
+                        Spacer(Modifier.height(RowGap))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (cert != null) {
+                                if (certificationIconUrl(selectedBoard, cert) != null) {
+                                    CertificationIcon(
+                                        selectedBoard,
+                                        cert,
+                                        height = 34.dp,
+                                        width = 70.dp,
+                                    )
+                                } else {
+                                    // No bundled symbol: keep the value visible.
+                                    Text(
+                                        cert,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            log.rating?.let { rating ->
+                                if (cert != null) {
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        "·",
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                }
+                                Text(
+                                    ratingEmoji(rating),
+                                    fontSize = 34.sp,
+                                    lineHeight = 34.sp,
+                                )
+                            }
                         }
                     }
                 }
@@ -325,9 +333,4 @@ private fun venueText(venue: Venue): String = when (venue) {
 private fun ratingEmoji(rating: Rating): String = when (rating) {
     Rating.UP -> "👍"
     Rating.DOWN -> "👎"
-}
-
-private fun ratingLabel(rating: Rating): String = when (rating) {
-    Rating.UP -> "Liked"
-    Rating.DOWN -> "Disliked"
 }

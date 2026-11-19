@@ -15,6 +15,9 @@ const FAMILY_COLORS: Record<string, string> = {
 };
 const RATING_UP_COLOR = "#8fe3c0";
 const RATING_DOWN_COLOR = "#e5484d";
+/** Venue slice colors, shared with the Android stats screen. */
+const VENUE_THEATRE_COLOR = "#8fc4e8";
+const VENUE_HOME_COLOR = "#8fe3c0";
 const FALLBACK_COLOR = "#9d95a3";
 
 type Slice = { label: string; count: number; color: string };
@@ -41,12 +44,12 @@ export function renderStats(content: HTMLElement): void {
 
   const catalog = getState().catalog;
   const meta = metaLine(stats);
-  if (meta !== "") content.append(el("p", { class: "dim" }, meta));
+  if (meta !== "") content.append(el("p", { class: "dim stats-runtime" }, meta));
 
   content.append(
+    pieSection("Viewings by venue", venueSlices(stats)),
     pieSection("Ratings", ratingSlices(stats)),
     timelineSection(stats),
-    orderedBreakdown("Viewings by time of day", timeOfDayCounts(getState().logs)),
     pieSection("Viewings by projection family", familySlices(stats)),
     breakdown("Home viewings by medium", stats.viewings_by_medium, (key) =>
       optionLabel(catalog?.mediums ?? null, key)
@@ -58,10 +61,10 @@ export function renderStats(content: HTMLElement): void {
   );
 }
 
-/** `Time watched: …`, omitted when no runtime is known. */
+/** `Total film runtime watched: …`, omitted when no runtime is known. */
 function metaLine(stats: Stats): string {
   if (stats.total_viewings === 0 || stats.total_runtime_minutes === 0) return "";
-  return `Time watched: ${formatDuration(stats.total_runtime_minutes)}`;
+  return `Total film runtime watched: ${formatDuration(stats.total_runtime_minutes)}`;
 }
 
 /** `Xh Ym`, `Xh` on the hour, `Ym` under an hour. */
@@ -100,17 +103,28 @@ function familySlices(stats: Stats): Slice[] {
     }));
 }
 
-type TimelineMode = "year" | "month" | "weekday";
+/** Theatre/home slices; the venue cards above use the same labels. */
+function venueSlices(stats: Stats): Slice[] {
+  const { theatre, home } = stats.viewings_by_venue;
+  if (theatre + home === 0) return [];
+  return [
+    { label: "Theatre", count: theatre, color: VENUE_THEATRE_COLOR },
+    { label: "Home", count: home, color: VENUE_HOME_COLOR },
+  ];
+}
+
+type TimelineMode = "year" | "month" | "weekday" | "timeOfDay";
 
 const TIMELINE_LABELS: Record<TimelineMode, string> = {
   year: "Year",
   month: "Month",
   weekday: "Weekday",
+  timeOfDay: "Time of day",
 };
 
-const TIMELINE_ORDER: TimelineMode[] = ["year", "month", "weekday"];
+const TIMELINE_ORDER: TimelineMode[] = ["year", "month", "weekday", "timeOfDay"];
 
-/** Year, month, and weekday viewings in one section, newest first. */
+/** Year, month, weekday, and time-of-day viewings in one section. */
 function timelineSection(stats: Stats): HTMLElement | string {
   const views: Record<TimelineMode, [string, number][]> = {
     year: Object.entries(stats.viewings_by_year)
@@ -121,6 +135,7 @@ function timelineSection(stats: Stats): HTMLElement | string {
       .reverse()
       .map((month): [string, number] => [month.month, month.count]),
     weekday: weekdayCounts(getState().logs),
+    timeOfDay: timeOfDayCounts(getState().logs),
   };
   if (TIMELINE_ORDER.every((mode) => views[mode].length === 0)) return "";
 

@@ -107,6 +107,9 @@ example `## [0.1.0] - 2026-11-15`.
   sides, and no text labels (a text fallback remains for boards with no bundled
   symbol). The rating symbol sits on a translucent light panel, lighter than the
   row/card surface, and the film page uses the same badge size and fallback.
+- Stats: time of day is now a fourth option in the switchable "Viewings over
+  time" section, a Theatre/Home pie chart shows the venue split, and the runtime
+  line reads "Total film runtime watched:" centred under the cards.
 
 ### Removed
 

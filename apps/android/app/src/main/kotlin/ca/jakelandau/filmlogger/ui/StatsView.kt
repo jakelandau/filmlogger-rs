@@ -2,6 +2,8 @@ package ca.jakelandau.filmlogger.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -48,6 +51,8 @@ private val FAMILY_COLORS = mapOf(
 private val FALLBACK_COLOR = Color(0xFF9D95A3)
 private val RATING_UP_COLOR = Color(0xFF8FE3C0)
 private val RATING_DOWN_COLOR = Color(0xFFE5484D)
+private val VENUE_THEATRE_COLOR = Color(0xFF8FC4E8)
+private val VENUE_HOME_COLOR = Color(0xFF8FE3C0)
 
 /** One pie slice: label, count, and slice color. */
 private data class Slice(val label: String, val count: Int, val color: Color)
@@ -57,6 +62,7 @@ private enum class TimelineMode(val label: String) {
     YEAR("Year"),
     MONTH("Month"),
     WEEKDAY("Weekday"),
+    TIME_OF_DAY("Time of day"),
 }
 
 /**
@@ -110,6 +116,8 @@ fun StatsView(stats: Stats?, catalog: FormatCatalog, logs: List<WatchLog>) {
                 Spacer(Modifier.height(12.dp))
                 Text(
                     meta,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -117,11 +125,14 @@ fun StatsView(stats: Stats?, catalog: FormatCatalog, logs: List<WatchLog>) {
             Spacer(Modifier.height(16.dp))
         }
 
+        val venues = venueSlices(stats)
+        if (venues.isNotEmpty()) {
+            item { PieSection("Viewings by venue", venues) }
+        }
         if (ratings.isNotEmpty()) {
             item { PieSection("Ratings", ratings) }
         }
         item { TimelineSection(stats, logs) }
-        breakdownValues("Viewings by time of day", timeOfDayCounts(logs))
         if (families.isNotEmpty()) {
             item { PieSection("Viewings by projection family", families) }
         }
@@ -138,10 +149,10 @@ fun StatsView(stats: Stats?, catalog: FormatCatalog, logs: List<WatchLog>) {
     }
 }
 
-/** `Time watched: …`, omitted when no runtime is known. */
+/** `Total film runtime watched: …`, omitted when no runtime is known. */
 private fun metaLine(stats: Stats): String {
     if (stats.totalViewings == 0u || stats.totalRuntimeMinutes == 0u) return ""
-    return "Time watched: ${formatDuration(stats.totalRuntimeMinutes)}"
+    return "Total film runtime watched: ${formatDuration(stats.totalRuntimeMinutes)}"
 }
 
 /** `Xh Ym`, `Xh` on the hour, `Ym` under an hour. */
@@ -168,6 +179,17 @@ private fun ratingSlices(stats: Stats): List<Slice> {
     return listOf(
         Slice("👍 Liked", stats.ratings.up.toInt(), RATING_UP_COLOR),
         Slice("👎 Disliked", stats.ratings.down.toInt(), RATING_DOWN_COLOR),
+    )
+}
+
+/** Theatre/home slices; the venue cards above use the same labels. */
+private fun venueSlices(stats: Stats): List<Slice> {
+    val theatre = stats.viewingsByVenue.theatre.toInt()
+    val home = stats.viewingsByVenue.home.toInt()
+    if (theatre + home == 0) return emptyList()
+    return listOf(
+        Slice("Theatre", theatre, VENUE_THEATRE_COLOR),
+        Slice("Home", home, VENUE_HOME_COLOR),
     )
 }
 
@@ -203,7 +225,8 @@ private fun PieSection(title: String, slices: List<Slice>) {
     val total = slices.sumOf { it.count }
     if (total == 0) return
     Text(title, style = MaterialTheme.typography.titleLarge)
-    Spacer(Modifier.height(8.dp))
+    // Match the first bar row's offset below its header (~16dp + row padding).
+    Spacer(Modifier.height(16.dp))
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -255,7 +278,7 @@ private fun PieSection(title: String, slices: List<Slice>) {
     Spacer(Modifier.height(12.dp))
 }
 
-/** Year, month, and weekday viewings in one section, newest first. */
+/** Year, month, weekday, and time-of-day viewings in one section. */
 @Composable
 private fun TimelineSection(stats: Stats, logs: List<WatchLog>) {
     val yearEntries = stats.viewingsByYear
@@ -264,22 +287,31 @@ private fun TimelineSection(stats: Stats, logs: List<WatchLog>) {
     // The core orders months oldest first; show newest first like years.
     val monthEntries = stats.viewingsByMonth.reversed().map { it.key to it.count.toInt() }
     val weekdayEntries = weekdayCounts(logs)
-    if (yearEntries.isEmpty() && monthEntries.isEmpty() && weekdayEntries.isEmpty()) return
+    val timeOfDayEntries = timeOfDayCounts(logs)
+    if (yearEntries.isEmpty() && monthEntries.isEmpty() && weekdayEntries.isEmpty() &&
+        timeOfDayEntries.isEmpty()
+    ) {
+        return
+    }
 
     var mode by remember { mutableStateOf(TimelineMode.YEAR) }
     val entries = when (mode) {
         TimelineMode.YEAR -> yearEntries
         TimelineMode.MONTH -> monthEntries
         TimelineMode.WEEKDAY -> weekdayEntries
+        TimelineMode.TIME_OF_DAY -> timeOfDayEntries
     }
     Text("Viewings over time", style = MaterialTheme.typography.titleLarge)
     Spacer(Modifier.height(8.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         for (option in TimelineMode.entries) {
             FilterChip(
                 selected = mode == option,
                 onClick = { mode = option },
-                label = { Text(option.label) },
+                label = { Text(option.label, maxLines = 1) },
             )
         }
     }
